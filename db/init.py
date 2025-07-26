@@ -7,3 +7,7 @@ DATABASE_URL = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{setting
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_session():
+    """Get a database session"""
+    return SessionLocal()
