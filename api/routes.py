@@ -160,10 +160,63 @@ async def test_prometheus_connection(request: ConnectionTestRequest):
         "url": request.url
     }
 
-# Prometheus Mac metrics endpoints
-@router.get("/prometheus/mac/metrics")
-async def get_prometheus_mac_metrics():
-    """Get Mac system metrics from Prometheus"""
+# System detection endpoint
+@router.get("/system/info")
+async def get_system_info():
+    """Get current system information and OS type"""
+    import platform
+    import psutil
+    
+    system = platform.system().lower()
+    os_name = platform.platform()
+    
+    # Map system types to monitoring configurations
+    os_config = {
+        "darwin": {
+            "name": "macOS",
+            "icon": "🍎",
+            "monitoring_available": True,
+            "prometheus_job": "node-exporter",
+            "description": "Monitor your Mac system resources"
+        },
+        "linux": {
+            "name": "Linux",
+            "icon": "🐧", 
+            "monitoring_available": True,
+            "prometheus_job": "node-exporter",
+            "description": "Monitor your Linux system resources"
+        },
+        "windows": {
+            "name": "Windows",
+            "icon": "🪟",
+            "monitoring_available": True,
+            "prometheus_job": "windows-exporter",
+            "description": "Monitor your Windows system resources"
+        }
+    }
+    
+    current_os = os_config.get(system, {
+        "name": "Unknown",
+        "icon": "💻",
+        "monitoring_available": False,
+        "prometheus_job": "unknown",
+        "description": "System monitoring not configured"
+    })
+    
+    return {
+        "system_type": system,
+        "os_name": os_name,
+        "hostname": platform.node(),
+        "architecture": platform.machine(),
+        "cpu_count": psutil.cpu_count(),
+        "memory_total_gb": round(psutil.virtual_memory().total / (1024**3), 1),
+        "os_config": current_os
+    }
+
+# Prometheus system metrics endpoints
+@router.get("/prometheus/system/metrics")
+async def get_prometheus_system_metrics():
+    """Get current system metrics from Prometheus (works with any OS)"""
     import requests
     import json
     
@@ -203,15 +256,20 @@ async def get_prometheus_mac_metrics():
             if disk_data.get('data', {}).get('result'):
                 disk_usage = float(disk_data['data']['result'][0]['value'][1])
         
+        # Get system info for dynamic naming
+        system_info = await get_system_info()
+        
         return {
-            "hostname": "Mac-System",
+            "hostname": f"{system_info['os_config']['name']}-System",
             "cpu_usage": round(cpu_usage, 2),
             "memory_usage": round(memory_usage, 2),
             "disk_usage": round(disk_usage, 2),
             "status": "running",
             "source": "prometheus",
-            "cores": 10,  # Based on the metrics we saw
-            "memory_total_gb": 18  # ~19GB total
+            "cores": system_info['cpu_count'],
+            "memory_total_gb": system_info['memory_total_gb'],
+            "system_type": system_info['system_type'],
+            "os_config": system_info['os_config']
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch Prometheus metrics: {str(e)}")
@@ -223,28 +281,28 @@ async def get_all_vms():
         # Get traditional underutilized VMs
         underutilized = get_underutilized_vms()
         
-        # Get Mac system metrics from Prometheus
-        mac_metrics_response = await get_prometheus_mac_metrics()
+        # Get system metrics from Prometheus
+        system_metrics_response = await get_prometheus_system_metrics()
         
-        # Create Mac VM entry
-        mac_vm = {
-            "vm": "Mac-System",
+        # Create system VM entry
+        system_vm = {
+            "vm": system_metrics_response["hostname"],
             "status": "running",
-            "cpu": mac_metrics_response["cpu_usage"],
-            "memory_usage": mac_metrics_response["memory_usage"],
-            "cores": mac_metrics_response["cores"],
-            "memory": mac_metrics_response["memory_total_gb"],
-            "cluster": "local-mac",
+            "cpu": system_metrics_response["cpu_usage"],
+            "memory_usage": system_metrics_response["memory_usage"],
+            "cores": system_metrics_response["cores"],
+            "memory": system_metrics_response["memory_total_gb"],
+            "cluster": f"local-{system_metrics_response['system_type']}",
             "source": "prometheus",
             "details": {
-                "avg_cpu": mac_metrics_response["cpu_usage"],
-                "avg_mem": mac_metrics_response["memory_usage"],
-                "disk_usage": mac_metrics_response["disk_usage"]
+                "avg_cpu": system_metrics_response["cpu_usage"],
+                "avg_mem": system_metrics_response["memory_usage"],
+                "disk_usage": system_metrics_response["disk_usage"]
             }
         }
         
         # Combine all VMs
-        all_vms = [mac_vm] + underutilized
+        all_vms = [system_vm] + underutilized
         return all_vms
         
     except Exception as e:

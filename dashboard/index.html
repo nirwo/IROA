@@ -96,7 +96,7 @@
             <button 
               v-for="tab in tabs" 
               :key="tab.id"
-              @click="activeTab = tab.id"
+              @click="setActiveTab(tab.id)"
               :class="[
                 'py-4 px-2 border-b-2 font-medium text-sm transition-colors duration-200',
                 activeTab === tab.id 
@@ -520,7 +520,7 @@
                       class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
                 <div v-if="loading.analytics" class="loading-spinner mr-2"></div>
                 <i v-else data-lucide="monitor" class="w-4 h-4 mr-2"></i>
-                {{ loading.analytics ? 'Loading...' : 'Load Mac Analytics (Prometheus)' }}
+                {{ loading.analytics ? 'Loading...' : `Load ${systemInfo?.os_config?.name || 'System'} Analytics (Prometheus)` }}
               </button>
             </div>
           </div>
@@ -573,7 +573,7 @@
     createApp({
       data() {
         return {
-          activeTab: 'overview',
+          activeTab: localStorage.getItem('iroa-active-tab') || 'overview',
           apiConnected: false,
           notification: null,
           vmSearchTerm: '',
@@ -581,6 +581,7 @@
           underutilizedVMs: [],
           forecast: [],
           anomalies: [],
+          systemInfo: null,
           loading: {
             recommendations: false,
             vms: false,
@@ -596,10 +597,10 @@
             { id: 'admin', name: 'Administration', icon: 'settings' }
           ],
           stats: [
-            { title: 'Total VMs', value: '5', change: 0, icon: 'server', bgColor: 'bg-blue-500' },
-            { title: 'Underutilized', value: '2', change: -20, icon: 'trending-down', bgColor: 'bg-yellow-500' },
-            { title: 'Cost Savings', value: '$1,240', change: 15, icon: 'dollar-sign', bgColor: 'bg-green-500' },
-            { title: 'Efficiency', value: '87%', change: 5, icon: 'zap', bgColor: 'bg-purple-500' }
+            { title: 'Total VMs', value: '0', change: 0, icon: 'server', bgColor: 'bg-blue-500' },
+            { title: 'Underutilized', value: '0', change: 0, icon: 'trending-down', bgColor: 'bg-yellow-500' },
+            { title: 'Cost Savings', value: '$0', change: 0, icon: 'dollar-sign', bgColor: 'bg-green-500' },
+            { title: 'Efficiency', value: '0%', change: 0, icon: 'zap', bgColor: 'bg-purple-500' }
           ],
           adminData: {
             selectedIntegration: 'mac',
@@ -633,6 +634,12 @@
         }
       },
       methods: {
+        // Tab management
+        setActiveTab(tabId) {
+          this.activeTab = tabId;
+          localStorage.setItem('iroa-active-tab', tabId);
+        },
+
         // Notification system
         showNotification(message, type = 'info') {
           this.notification = { message, type };
@@ -649,6 +656,28 @@
             this.apiConnected = data.status === 'ok';
           } catch (error) {
             this.apiConnected = false;
+          }
+        },
+
+        // System information
+        async loadSystemInfo() {
+          try {
+            const response = await fetch('http://localhost:8001/system/info');
+            const data = await response.json();
+            this.systemInfo = data;
+            
+            // Update admin integration options based on detected OS
+            this.adminData.integrationOptions[0] = {
+              id: data.system_type,
+              name: `${data.os_config.name} System`,
+              icon: data.os_config.icon,
+              description: data.os_config.description
+            };
+            
+            // Set default selection to detected OS
+            this.adminData.selectedIntegration = data.system_type;
+          } catch (error) {
+            console.error('Failed to load system info:', error);
           }
         },
 
@@ -674,9 +703,13 @@
             const response = await fetch('http://localhost:8001/vms');
             const data = await response.json();
             this.underutilizedVMs = data;
-            const macVM = data.find(vm => vm.source === 'prometheus');
-            const message = macVM ? 
-              `Found ${data.length} VMs (including Mac system from Prometheus)` : 
+            
+            // Update stats based on real data
+            this.updateStatsFromVMs(data);
+            
+            const systemVM = data.find(vm => vm.source === 'prometheus');
+            const message = systemVM ? 
+              `Found ${data.length} VMs (including ${systemVM.vm} from Prometheus)` : 
               `Found ${data.length} VMs`;
             this.showNotification(message, 'success');
           } catch (error) {
@@ -684,6 +717,19 @@
           } finally {
             this.loading.vms = false;
           }
+        },
+
+        // Update overview stats based on real VM data
+        updateStatsFromVMs(vms) {
+          const totalVMs = vms.length;
+          const underutilizedVMs = vms.filter(vm => vm.cpu < 30 && vm.memory_usage < 50).length;
+          const avgEfficiency = totalVMs > 0 ? Math.round(vms.reduce((acc, vm) => acc + vm.cpu, 0) / totalVMs) : 0;
+          const costSavings = underutilizedVMs * 124; // $124 per underutilized VM
+          
+          this.stats[0].value = totalVMs.toString();
+          this.stats[1].value = underutilizedVMs.toString();
+          this.stats[2].value = `$${costSavings.toLocaleString()}`;
+          this.stats[3].value = `${avgEfficiency}%`;
         },
 
         // Analytics methods
@@ -905,6 +951,12 @@
         // Check API connection
         this.checkAPIConnection();
         
+        // Load system information for dynamic OS detection
+        this.loadSystemInfo();
+        
+        // Always load VMs on startup
+        this.loadUnderutilizedVMs();
+        
         // Initialize charts after a short delay
         this.$nextTick(() => {
           setTimeout(() => {
@@ -916,7 +968,7 @@
           }, 100);
         });
 
-        // Get initial Mac stats
+        // Get initial system stats
         this.getMacStats();
         
         // Set up periodic API health check
