@@ -120,6 +120,36 @@ async def get_mac_stats():
         "monitoring_active": False
     }
 
+@router.get("/admin/database/status")
+async def get_database_status():
+    """Check database connectivity and health"""
+    try:
+        import sqlite3
+        import os
+        
+        db_path = "data/iroa.db"
+        if not os.path.exists("data"):
+            os.makedirs("data")
+            
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        conn.close()
+        
+        return {
+            "status": "connected",
+            "message": "Database is accessible",
+            "database_path": db_path,
+            "test_result": result[0] if result else None
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Database connection failed: {str(e)}",
+            "database_path": "data/iroa.db"
+        }
+
 @router.post("/admin/vcenter/test")
 async def test_vcenter_connection(request: ConnectionTestRequest):
     """Test vCenter connection with real authentication"""

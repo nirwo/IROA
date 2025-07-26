@@ -80,9 +80,24 @@
               </div>
             </div>
             <div class="flex items-center space-x-4">
-              <div class="flex items-center space-x-2 text-sm">
-                <div :class="apiConnected ? 'bg-green-500' : 'bg-red-500'" class="w-2 h-2 rounded-full"></div>
-                <span :class="apiConnected ? 'text-green-600' : 'text-red-600'">{{ apiConnected ? 'API Connected' : 'API Disconnected' }}</span>
+              <!-- Comprehensive Endpoint Status -->
+              <div class="flex items-center space-x-4 text-sm">
+                <div class="flex items-center space-x-2">
+                  <div :class="endpointStatus.api ? 'bg-green-500' : 'bg-red-500'" class="w-2 h-2 rounded-full"></div>
+                  <span :class="endpointStatus.api ? 'text-green-600' : 'text-red-600'">API</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <div :class="endpointStatus.prometheus ? 'bg-green-500' : 'bg-red-500'" class="w-2 h-2 rounded-full"></div>
+                  <span :class="endpointStatus.prometheus ? 'text-green-600' : 'text-red-600'">Prometheus</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <div :class="endpointStatus.database ? 'bg-green-500' : 'bg-red-500'" class="w-2 h-2 rounded-full"></div>
+                  <span :class="endpointStatus.database ? 'text-green-600' : 'text-red-600'">Database</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <div :class="endpointStatus.vcenter ? 'bg-green-500' : 'bg-yellow-500'" class="w-2 h-2 rounded-full"></div>
+                  <span :class="endpointStatus.vcenter ? 'text-green-600' : 'text-yellow-600'">vCenter</span>
+                </div>
               </div>
             </div>
           </div>
@@ -279,7 +294,10 @@
                 <i data-lucide="refresh-cw" class="w-4 h-4 mr-2" :class="{'animate-spin': loading.licenses}"></i>
                 {{ loading.licenses ? 'Loading...' : 'Refresh Licenses' }}
               </button>
-              <button class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+              <button 
+                @click="showAddLicenseForm = true"
+                class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center"
+              >
                 <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
                 Add License
               </button>
@@ -505,7 +523,7 @@
         </div>
 
         <!-- Administration Tab -->
-        <div v-if="activeTab === 'admin'" class="tab-content">
+        <div v-if="activeTab === 'administration'" class="tab-content">
           <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">System Administration</h2>
             <p class="text-gray-600">Manage integrations and system monitoring</p>
@@ -919,6 +937,12 @@
         return {
           activeTab: localStorage.getItem('iroa-active-tab') || 'overview',
           apiConnected: false,
+          endpointStatus: {
+            api: false,
+            prometheus: false,
+            database: false,
+            vcenter: false
+          },
           notification: null,
           notificationTimeout: null,
           vmSearchTerm: '',
@@ -937,6 +961,17 @@
             recommendations: []
           },
           licenses: [],
+          showAddLicenseForm: false,
+          newLicense: {
+            name: '',
+            vendor: '',
+            type: 'Perpetual',
+            total: 1,
+            used: 0,
+            cost: 0,
+            expiry_date: '',
+            notes: ''
+          },
           profilePreview: {
             system_capacity: null,
             profile_analysis: [],
@@ -1275,8 +1310,60 @@
           }
         },
 
+        // Endpoint Status Checking
+        async checkAllEndpoints() {
+          console.log('🔍 Checking all endpoint statuses...');
+          
+          // Check API
+          try {
+            const apiResponse = await fetch(`${this.apiBaseUrl}/health`, { timeout: 5000 });
+            this.endpointStatus.api = apiResponse.ok;
+            this.apiConnected = apiResponse.ok;
+            console.log(`✅ API Status: ${apiResponse.ok ? 'Connected' : 'Disconnected'}`);
+          } catch (error) {
+            this.endpointStatus.api = false;
+            this.apiConnected = false;
+            console.error('❌ API Status: Disconnected -', error.message);
+          }
+          
+          // Check Prometheus
+          try {
+            const prometheusUrl = window.location.protocol + '//' + window.location.hostname + ':9090';
+            const prometheusResponse = await fetch(`${prometheusUrl}/api/v1/query?query=up`, { timeout: 5000 });
+            this.endpointStatus.prometheus = prometheusResponse.ok;
+            console.log(`✅ Prometheus Status: ${prometheusResponse.ok ? 'Connected' : 'Disconnected'}`);
+          } catch (error) {
+            this.endpointStatus.prometheus = false;
+            console.error('❌ Prometheus Status: Disconnected -', error.message);
+          }
+          
+          // Check Database (via API)
+          try {
+            const dbResponse = await fetch(`${this.apiBaseUrl}/admin/database/status`, { timeout: 5000 });
+            this.endpointStatus.database = dbResponse.ok;
+            console.log(`✅ Database Status: ${dbResponse.ok ? 'Connected' : 'Disconnected'}`);
+          } catch (error) {
+            this.endpointStatus.database = false;
+            console.error('❌ Database Status: Disconnected -', error.message);
+          }
+          
+          // Check vCenter (via saved integrations)
+          try {
+            const vcenterResponse = await fetch(`${this.apiBaseUrl}/admin/integrations/config`, { timeout: 5000 });
+            if (vcenterResponse.ok) {
+              const data = await vcenterResponse.json();
+              this.endpointStatus.vcenter = data.integrations?.vcenter ? true : false;
+            }
+            console.log(`✅ vCenter Status: ${this.endpointStatus.vcenter ? 'Configured' : 'Not Configured'}`);
+          } catch (error) {
+            this.endpointStatus.vcenter = false;
+            console.error('❌ vCenter Status: Not Configured -', error.message);
+          }
+        },
+
         // License Management methods
         async loadLicenses() {
+          console.log('📄 Loading licenses...');
           this.loading.licenses = true;
           try {
             const response = await fetch(`${this.apiBaseUrl}/licenses`);
@@ -1285,9 +1372,10 @@
             }
             const data = await response.json();
             this.licenses = data;
+            console.log('✅ Licenses loaded successfully:', data.length, 'licenses');
             this.showNotification('Licenses loaded successfully!', 'success');
           } catch (error) {
-            console.error('Failed to load licenses:', error);
+            console.error('❌ Failed to load licenses:', error);
             // Fallback to mock data for demonstration
             this.licenses = [
               {
@@ -1325,6 +1413,116 @@
           } finally {
             this.loading.licenses = false;
           }
+        },
+
+        // Enhanced License Management Methods
+        async addLicense() {
+          console.log('📝 Adding new license:', this.newLicense);
+          this.loading.licenses = true;
+          try {
+            const response = await fetch(`${this.apiBaseUrl}/licenses`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newLicense)
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ License added successfully:', result);
+              this.showNotification('License added successfully!', 'success');
+              this.showAddLicenseForm = false;
+              this.resetLicenseForm();
+              await this.loadLicenses(); // Reload licenses
+            } else {
+              throw new Error(`HTTP ${response.status}`);
+            }
+          } catch (error) {
+            console.error('❌ Failed to add license:', error);
+            this.showNotification('Failed to add license: ' + error.message, 'error');
+          } finally {
+            this.loading.licenses = false;
+          }
+        },
+
+        async editLicense(license) {
+          console.log('✏️ Editing license:', license.id);
+          // Pre-populate form with license data
+          this.newLicense = { ...license };
+          this.showAddLicenseForm = true;
+        },
+
+        async updateLicense() {
+          console.log('💾 Updating license:', this.newLicense.id);
+          this.loading.licenses = true;
+          try {
+            const response = await fetch(`${this.apiBaseUrl}/licenses/${this.newLicense.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newLicense)
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ License updated successfully:', result);
+              this.showNotification('License updated successfully!', 'success');
+              this.showAddLicenseForm = false;
+              this.resetLicenseForm();
+              await this.loadLicenses(); // Reload licenses
+            } else {
+              throw new Error(`HTTP ${response.status}`);
+            }
+          } catch (error) {
+            console.error('❌ Failed to update license:', error);
+            this.showNotification('Failed to update license: ' + error.message, 'error');
+          } finally {
+            this.loading.licenses = false;
+          }
+        },
+
+        async deleteLicense(licenseId) {
+          console.log('🗑️ Deleting license:', licenseId);
+          if (!confirm('Are you sure you want to delete this license?')) {
+            return;
+          }
+          
+          this.loading.licenses = true;
+          try {
+            const response = await fetch(`${this.apiBaseUrl}/licenses/${licenseId}`, {
+              method: 'DELETE'
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ License deleted successfully:', result);
+              this.showNotification('License deleted successfully!', 'success');
+              await this.loadLicenses(); // Reload licenses
+            } else {
+              throw new Error(`HTTP ${response.status}`);
+            }
+          } catch (error) {
+            console.error('❌ Failed to delete license:', error);
+            this.showNotification('Failed to delete license: ' + error.message, 'error');
+          } finally {
+            this.loading.licenses = false;
+          }
+        },
+
+        resetLicenseForm() {
+          this.newLicense = {
+            name: '',
+            vendor: '',
+            type: 'Perpetual',
+            total: 1,
+            used: 0,
+            cost: 0,
+            expiry_date: '',
+            notes: ''
+          };
+        },
+
+        cancelLicenseForm() {
+          this.showAddLicenseForm = false;
+          this.resetLicenseForm();
         },
 
         async loadProfilePreview() {
@@ -1596,10 +1794,11 @@
             console.warn('Failed to load Mac stats:', err);
           });
           
-          // Set up periodic API health check
+          // Set up periodic endpoint status checking
+          await this.checkAllEndpoints();
           setInterval(() => {
-            this.checkAPIConnection().catch(err => {
-              console.warn('API health check failed:', err);
+            this.checkAllEndpoints().catch(err => {
+              console.warn('Endpoint status check failed:', err);
             });
           }, 30000);
           
