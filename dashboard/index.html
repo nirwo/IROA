@@ -953,6 +953,7 @@
             licenses: false,
             profiles: false
           },
+          apiBaseUrl: window.location.protocol + '//' + window.location.hostname + ':8001',
           tabs: [
             { id: 'overview', name: 'Overview', icon: 'layout-grid' },
             { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
@@ -987,7 +988,7 @@
             connectionForms: {
               vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
               zabbix: { url: 'http://zabbix.local', username: 'admin', password: '' },
-              prometheus: { url: 'http://localhost:9090', username: '', password: '' }
+              prometheus: { url: window.location.protocol + '//' + window.location.hostname + ':9090', username: '', password: '' }
             },
             savedIntegrations: {}
           }
@@ -1033,7 +1034,7 @@
         // API connectivity check with proper error handling
         async checkAPIConnection() {
           try {
-            const response = await fetch('http://localhost:8001/health');
+            const response = await fetch(`${this.apiBaseUrl}/health`);
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}`);
             }
@@ -1048,7 +1049,7 @@
         // System information with proper error handling
         async loadSystemInfo() {
           try {
-            const response = await fetch('http://localhost:8001/system/info');
+            const response = await fetch(`${this.apiBaseUrl}/system/info`);
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}`);
             }
@@ -1074,7 +1075,7 @@
         async loadRecommendations() {
           this.loading.recommendations = true;
           try {
-            const response = await fetch('http://localhost:8001/recommendations');
+            const response = await fetch(`${this.apiBaseUrl}/recommendations`);
             const data = await response.json();
             this.recommendations = data;
             this.showNotification(`Loaded ${data.length} recommendations`, 'success');
@@ -1089,7 +1090,7 @@
         async loadUnderutilizedVMs() {
           this.loading.vms = true;
           try {
-            const response = await fetch('http://localhost:8001/vms');
+            const response = await fetch(`${this.apiBaseUrl}/vms`);
             const data = await response.json();
             this.underutilizedVMs = data;
             
@@ -1125,7 +1126,7 @@
         async loadForecast(vmId) {
           this.loading.analytics = true;
           try {
-            const response = await fetch(`http://localhost:8001/forecast/${vmId}?hours=24`);
+            const response = await fetch(`${this.apiBaseUrl}/forecast/${vmId}?hours=24`);
             const data = await response.json();
             this.forecast = data.cpu_forecast || [];
             this.showNotification('CPU forecast loaded successfully', 'success');
@@ -1139,7 +1140,7 @@
         async loadAnomalies(vmId) {
           this.loading.anomalies = true;
           try {
-            const response = await fetch(`http://localhost:8001/anomalies/${vmId}`);
+            const response = await fetch(`${this.apiBaseUrl}/anomalies/${vmId}`);
             const data = await response.json();
             this.anomalies = data.anomalies || [];
             this.showNotification(`Found ${this.anomalies.length} anomalies`, 'success');
@@ -1153,7 +1154,7 @@
         async loadPrometheusAnalytics() {
           this.loading.analytics = true;
           try {
-            const response = await fetch('http://localhost:8001/analytics/prometheus');
+            const response = await fetch(`${this.apiBaseUrl}/analytics/prometheus`);
             const data = await response.json();
             
             // Update forecast with Prometheus CPU data
@@ -1186,7 +1187,7 @@
         // Mac monitoring methods
         async startMacMonitoring() {
           try {
-            const response = await fetch('http://localhost:8001/admin/mac/start', {
+            const response = await fetch(`${this.apiBaseUrl}/admin/mac/start`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ interval: this.adminData.macMonitoring.interval })
@@ -1203,7 +1204,7 @@
 
         async stopMacMonitoring() {
           try {
-            const response = await fetch('http://localhost:8001/admin/mac/stop', {
+            const response = await fetch(`${this.apiBaseUrl}/admin/mac/stop`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' }
             });
@@ -1219,7 +1220,7 @@
 
         async getMacStats() {
           try {
-            const response = await fetch('http://localhost:8001/admin/mac/stats');
+            const response = await fetch(`${this.apiBaseUrl}/admin/mac/stats`);
             const data = await response.json();
             this.adminData.macMonitoring.systemInfo = data.system_info;
             this.adminData.macMonitoring.currentStats = {
@@ -1238,7 +1239,7 @@
         async loadCapacityData() {
           this.loading.capacity = true;
           try {
-            const response = await fetch('http://localhost:8001/capacity/analysis');
+            const response = await fetch(`${this.apiBaseUrl}/capacity/analysis`);
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}`);
             }
@@ -1278,7 +1279,7 @@
         async loadLicenses() {
           this.loading.licenses = true;
           try {
-            const response = await fetch('http://localhost:8001/licenses');
+            const response = await fetch(`${this.apiBaseUrl}/licenses`);
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}`);
             }
@@ -1329,7 +1330,7 @@
         async loadProfilePreview() {
           this.loading.profiles = true;
           try {
-            const response = await fetch('http://localhost:8001/profiles/preview');
+            const response = await fetch(`${this.apiBaseUrl}/profiles/preview`);
             if (response.ok) {
               const data = await response.json();
               this.profilePreview = data;
@@ -1417,7 +1418,7 @@
           this.loading.connectionTest = true;
           try {
             const form = this.adminData.connectionForms[integrationType];
-            const endpoint = `http://localhost:8001/admin/${integrationType}/test`;
+            const endpoint = `${this.apiBaseUrl}/admin/${integrationType}/test`;
             
             const response = await fetch(endpoint, {
               method: 'POST',
@@ -1443,7 +1444,7 @@
           this.loading.connectionTest = true;
           try {
             const form = this.adminData.connectionForms[integrationType];
-            const endpoint = `http://localhost:8001/admin/${integrationType}/save`;
+            const endpoint = `${this.apiBaseUrl}/admin/${integrationType}/save`;
             
             const response = await fetch(endpoint, {
               method: 'POST',
@@ -1473,7 +1474,7 @@
 
         async loadSavedIntegrations() {
           try {
-            const response = await fetch('http://localhost:8001/admin/integrations/config');
+            const response = await fetch(`${this.apiBaseUrl}/admin/integrations/config`);
             if (response.ok) {
               const data = await response.json();
               this.adminData.savedIntegrations = data.integrations || {};

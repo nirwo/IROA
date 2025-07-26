@@ -111,7 +111,7 @@ start_frontend() {
         if command -v python3 &> /dev/null; then
             print_status "Starting Python HTTP server on port 3000..."
             cd dashboard
-            python3 -m http.server 3000 > ../logs/frontend.log 2>&1 &
+            python3 -m http.server 3000 --bind 0.0.0.0 > ../logs/frontend.log 2>&1 &
             echo $! > ../frontend.pid
             cd ..
         elif command -v python &> /dev/null; then
@@ -128,12 +128,12 @@ start_frontend() {
         # Use Node.js HTTP server
         print_status "Starting Node.js HTTP server on port 3000..."
         cd dashboard
-        npx http-server -p 3000 -c-1 > ../logs/frontend.log 2>&1 &
+        npx http-server -p 3000 -a 0.0.0.0 -c-1 > ../logs/frontend.log 2>&1 &
         echo $! > ../frontend.pid
         cd ..
     fi
     
-    print_success "Frontend server started on http://localhost:3000"
+    print_success "Frontend server started on http://0.0.0.0:3000"
 }
 
 # Wait for services to be ready
@@ -192,9 +192,9 @@ main() {
     echo ""
     echo "🎉 IROA System Started Successfully!"
     echo "===================================="
-    echo "📊 Dashboard: http://localhost:3000"
-    echo "🔧 API: http://localhost:8001"
-    echo "📈 Prometheus: http://localhost:9090 (if available)"
+    echo "📊 Dashboard: http://$(hostname -I | awk '{print $1}'):3000 (or http://localhost:3000)"
+    echo "🔧 API: http://$(hostname -I | awk '{print $1}'):8001 (or http://localhost:8001)"
+    echo "📈 Prometheus: http://$(hostname -I | awk '{print $1}'):9090 (or http://localhost:9090)"
     echo ""
     echo "📝 Logs:"
     echo "   Frontend: logs/frontend.log"

@@ -101,9 +101,11 @@ Complete setup for new deployments.
 
 Once started, access the system at:
 
-- **📊 IROA Dashboard:** http://localhost:3000
-- **🔧 API Documentation:** http://localhost:8001/docs
-- **📈 Prometheus:** http://localhost:9090
+- **📊 IROA Dashboard:** http://YOUR_HOST_IP:3000 (or http://localhost:3000)
+- **🔧 API Documentation:** http://YOUR_HOST_IP:8001/docs (or http://localhost:8001/docs)
+- **📈 Prometheus:** http://YOUR_HOST_IP:9090 (or http://localhost:9090)
+
+**Network Access:** All services bind to 0.0.0.0, making them accessible from other computers on your network. Replace `YOUR_HOST_IP` with your machine's IP address.
 
 ## 📁 Directory Structure
 

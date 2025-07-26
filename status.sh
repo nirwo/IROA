@@ -96,9 +96,10 @@ fi
 echo ""
 echo "🌍 Access URLs:"
 echo "--------------"
-echo "📊 Dashboard: http://localhost:3000"
-echo "🔧 API: http://localhost:8001"
-echo "📈 Prometheus: http://localhost:9090"
+HOST_IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
+echo "📊 Dashboard: http://$HOST_IP:3000 (or http://localhost:3000)"
+echo "🔧 API: http://$HOST_IP:8001 (or http://localhost:8001)"
+echo "📈 Prometheus: http://$HOST_IP:9090 (or http://localhost:9090)"
 
 # Show logs location
 echo ""

@@ -387,7 +387,7 @@ async def get_prometheus_system_metrics():
     import json
     
     try:
-        prometheus_url = "http://localhost:9090"
+        prometheus_url = "http://localhost:9090"  # Keep localhost for internal API calls
         
         # Get CPU usage using load average (more reliable for Mac)
         cpu_response = requests.get(f"{prometheus_url}/api/v1/query", 
@@ -484,7 +484,7 @@ async def get_prometheus_analytics():
     import requests
     
     try:
-        prometheus_url = "http://localhost:9090"
+        prometheus_url = "http://localhost:9090"  # Keep localhost for internal API calls
         
         # Get CPU usage over time (last hour)
         cpu_history = requests.get(f"{prometheus_url}/api/v1/query_range",
