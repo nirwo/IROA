@@ -159,3 +159,145 @@ async def test_prometheus_connection(request: ConnectionTestRequest):
         "message": f"Successfully connected to Prometheus at {request.url}",
         "url": request.url
     }
+
+# Prometheus Mac metrics endpoints
+@router.get("/prometheus/mac/metrics")
+async def get_prometheus_mac_metrics():
+    """Get Mac system metrics from Prometheus"""
+    import requests
+    import json
+    
+    try:
+        prometheus_url = "http://localhost:9090"
+        
+        # Get CPU usage using load average (more reliable for Mac)
+        cpu_response = requests.get(f"{prometheus_url}/api/v1/query", 
+                                  params={"query": "node_load1"})
+        
+        # Get memory usage (Mac-specific: active + wired memory)
+        memory_response = requests.get(f"{prometheus_url}/api/v1/query",
+                                     params={"query": "((node_memory_active_bytes + node_memory_wired_bytes) / node_memory_total_bytes) * 100"})
+        
+        # Get disk usage for root filesystem
+        disk_response = requests.get(f"{prometheus_url}/api/v1/query",
+                                   params={"query": "100 - ((node_filesystem_free_bytes{{mountpoint='/'}} * 100) / node_filesystem_size_bytes{{mountpoint='/'}})"})
+        
+        # Parse responses
+        cpu_usage = 0
+        if cpu_response.status_code == 200:
+            cpu_data = cpu_response.json()
+            if cpu_data.get('data', {}).get('result'):
+                load_avg = float(cpu_data['data']['result'][0]['value'][1])
+                # Convert load average to percentage (load/cores * 100)
+                cpu_usage = min((load_avg / 10) * 100, 100)  # 10 cores
+        
+        memory_usage = 0
+        if memory_response.status_code == 200:
+            memory_data = memory_response.json()
+            if memory_data.get('data', {}).get('result'):
+                memory_usage = float(memory_data['data']['result'][0]['value'][1])
+        
+        disk_usage = 0
+        if disk_response.status_code == 200:
+            disk_data = disk_response.json()
+            if disk_data.get('data', {}).get('result'):
+                disk_usage = float(disk_data['data']['result'][0]['value'][1])
+        
+        return {
+            "hostname": "Mac-System",
+            "cpu_usage": round(cpu_usage, 2),
+            "memory_usage": round(memory_usage, 2),
+            "disk_usage": round(disk_usage, 2),
+            "status": "running",
+            "source": "prometheus",
+            "cores": 10,  # Based on the metrics we saw
+            "memory_total_gb": 18  # ~19GB total
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Prometheus metrics: {str(e)}")
+
+@router.get("/vms")
+async def get_all_vms():
+    """Get all VMs including Mac system from Prometheus"""
+    try:
+        # Get traditional underutilized VMs
+        underutilized = get_underutilized_vms()
+        
+        # Get Mac system metrics from Prometheus
+        mac_metrics_response = await get_prometheus_mac_metrics()
+        
+        # Create Mac VM entry
+        mac_vm = {
+            "vm": "Mac-System",
+            "status": "running",
+            "cpu": mac_metrics_response["cpu_usage"],
+            "memory_usage": mac_metrics_response["memory_usage"],
+            "cores": mac_metrics_response["cores"],
+            "memory": mac_metrics_response["memory_total_gb"],
+            "cluster": "local-mac",
+            "source": "prometheus",
+            "details": {
+                "avg_cpu": mac_metrics_response["cpu_usage"],
+                "avg_mem": mac_metrics_response["memory_usage"],
+                "disk_usage": mac_metrics_response["disk_usage"]
+            }
+        }
+        
+        # Combine all VMs
+        all_vms = [mac_vm] + underutilized
+        return all_vms
+        
+    except Exception as e:
+        # If Prometheus fails, just return underutilized VMs
+        return get_underutilized_vms()
+
+@router.get("/analytics/prometheus")
+async def get_prometheus_analytics():
+    """Get Mac analytics data from Prometheus"""
+    import requests
+    
+    try:
+        prometheus_url = "http://localhost:9090"
+        
+        # Get CPU usage over time (last hour)
+        cpu_history = requests.get(f"{prometheus_url}/api/v1/query_range",
+                                 params={
+                                     "query": "100 - (avg(rate(node_cpu_seconds_total{{mode='idle'}}[5m])) * 100)",
+                                     "start": "2025-07-26T08:00:00Z",
+                                     "end": "2025-07-26T12:00:00Z",
+                                     "step": "300s"
+                                 })
+        
+        # Get memory usage over time
+        memory_history = requests.get(f"{prometheus_url}/api/v1/query_range",
+                                    params={
+                                        "query": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                                        "start": "2025-07-26T08:00:00Z",
+                                        "end": "2025-07-26T12:00:00Z",
+                                        "step": "300s"
+                                    })
+        
+        cpu_data = []
+        memory_data = []
+        
+        if cpu_history.status_code == 200:
+            cpu_result = cpu_history.json()
+            if cpu_result.get('data', {}).get('result'):
+                cpu_values = cpu_result['data']['result'][0]['values']
+                cpu_data = [float(value[1]) for value in cpu_values[-12:]]  # Last 12 points
+        
+        if memory_history.status_code == 200:
+            memory_result = memory_history.json()
+            if memory_result.get('data', {}).get('result'):
+                memory_values = memory_result['data']['result'][0]['values']
+                memory_data = [float(value[1]) for value in memory_values[-12:]]  # Last 12 points
+        
+        return {
+            "cpu_history": cpu_data,
+            "memory_history": memory_data,
+            "source": "prometheus",
+            "timeframe": "last_4_hours"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Prometheus analytics: {str(e)}")

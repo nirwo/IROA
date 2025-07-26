@@ -503,7 +503,7 @@
           </div>
 
           <div class="mb-6">
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-4 flex-wrap gap-2">
               <button @click="loadForecast(1)" :disabled="loading.analytics" 
                       class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 flex items-center">
                 <div v-if="loading.analytics" class="loading-spinner mr-2"></div>
@@ -515,6 +515,12 @@
                 <div v-if="loading.anomalies" class="loading-spinner mr-2"></div>
                 <i v-else data-lucide="alert-triangle" class="w-4 h-4 mr-2"></i>
                 {{ loading.anomalies ? 'Loading...' : 'Detect Anomalies (VM 1)' }}
+              </button>
+              <button @click="loadPrometheusAnalytics()" :disabled="loading.analytics" 
+                      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+                <div v-if="loading.analytics" class="loading-spinner mr-2"></div>
+                <i v-else data-lucide="monitor" class="w-4 h-4 mr-2"></i>
+                {{ loading.analytics ? 'Loading...' : 'Load Mac Analytics (Prometheus)' }}
               </button>
             </div>
           </div>
@@ -665,10 +671,14 @@
         async loadUnderutilizedVMs() {
           this.loading.vms = true;
           try {
-            const response = await fetch('http://localhost:8001/underutilized');
+            const response = await fetch('http://localhost:8001/vms');
             const data = await response.json();
             this.underutilizedVMs = data;
-            this.showNotification(`Found ${data.length} underutilized VMs`, 'success');
+            const macVM = data.find(vm => vm.source === 'prometheus');
+            const message = macVM ? 
+              `Found ${data.length} VMs (including Mac system from Prometheus)` : 
+              `Found ${data.length} VMs`;
+            this.showNotification(message, 'success');
           } catch (error) {
             this.showNotification('Failed to load VMs: ' + error.message, 'error');
           } finally {
@@ -702,6 +712,39 @@
             this.showNotification('Failed to load anomalies: ' + error.message, 'error');
           } finally {
             this.loading.anomalies = false;
+          }
+        },
+
+        async loadPrometheusAnalytics() {
+          this.loading.analytics = true;
+          try {
+            const response = await fetch('http://localhost:8001/analytics/prometheus');
+            const data = await response.json();
+            
+            // Update forecast with Prometheus CPU data
+            this.forecast = data.cpu_history || [];
+            
+            // Create anomalies from memory spikes (>80% usage)
+            this.anomalies = [];
+            if (data.memory_history) {
+              data.memory_history.forEach((memUsage, index) => {
+                if (memUsage > 80) {
+                  this.anomalies.push({
+                    timestamp: new Date(Date.now() - (data.memory_history.length - index) * 300000).toISOString(),
+                    metric: 'memory_usage',
+                    value: memUsage,
+                    severity: 'high',
+                    description: `High memory usage: ${memUsage.toFixed(1)}%`
+                  });
+                }
+              });
+            }
+            
+            this.showNotification(`Loaded Mac analytics from Prometheus (${data.timeframe})`, 'success');
+          } catch (error) {
+            this.showNotification('Failed to load Prometheus analytics: ' + error.message, 'error');
+          } finally {
+            this.loading.analytics = false;
           }
         },
 
