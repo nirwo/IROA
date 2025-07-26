@@ -30,22 +30,22 @@
     <!-- Navigation -->
     <nav class="bg-white shadow-sm border-b">
       <div class="container mx-auto px-6">
-        <div class="flex space-x-8">
+        <nav class="flex space-x-1 bg-white rounded-lg p-1 shadow-sm">
           <button 
             v-for="tab in tabs" 
             :key="tab.id"
             @click="activeTab = tab.id"
             :class="[
-              'py-4 px-2 border-b-2 font-medium text-sm transition-colors',
+              'px-4 py-2 rounded-md text-sm font-medium transition-all duration-200',
               activeTab === tab.id 
-                ? 'border-indigo-500 text-indigo-600' 
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'bg-blue-500 text-white shadow-sm' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             ]"
           >
-            <i :data-lucide="tab.icon" class="w-4 h-4 inline mr-2"></i>
+            <i :class="tab.icon" class="mr-2"></i>
             {{ tab.name }}
           </button>
-        </div>
+        </nav>
       </div>
     </nav>
 
@@ -402,6 +402,187 @@
           </div>
         </div>
       </div>
+      
+      <!-- Administration Tab -->
+      <div v-if="activeTab === 'admin'" class="container mx-auto px-6 py-8">
+        <div class="mb-8">
+          <h2 class="text-2xl font-bold text-gray-900 mb-2">System Administration</h2>
+          <p class="text-gray-600">Manage integrations and monitor system health</p>
+        </div>
+        
+        <!-- Integration Selection -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div class="lg:col-span-1">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <h3 class="text-lg font-semibold mb-4">Integration Type</h3>
+              <div class="space-y-3">
+                <div 
+                  v-for="option in adminData.integrationOptions" 
+                  :key="option.id"
+                  @click="adminData.selectedIntegration = option.id"
+                  :class="[
+                    'p-4 rounded-lg border-2 cursor-pointer transition-all',
+                    adminData.selectedIntegration === option.id 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  ]"
+                >
+                  <div class="flex items-center space-x-3">
+                    <span class="text-2xl">{{ option.icon }}</span>
+                    <div>
+                      <h4 class="font-medium text-gray-900">{{ option.name }}</h4>
+                      <p class="text-sm text-gray-600">{{ option.description }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="lg:col-span-2">
+            <!-- Mac System Integration -->
+            <div v-if="adminData.selectedIntegration === 'mac'" class="bg-white rounded-xl shadow-sm p-6">
+              <h3 class="text-lg font-semibold mb-4">🍎 Mac System Integration</h3>
+              <div class="space-y-6">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div class="flex items-center space-x-2 mb-2">
+                    <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+                    <span class="text-sm font-medium text-blue-800">About Mac Monitoring</span>
+                  </div>
+                  <p class="text-sm text-blue-700">This integration monitors your Mac system resources and creates virtual VMs based on running processes for analysis.</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Monitoring Interval</label>
+                    <select v-model="adminData.macMonitoring.interval" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                      <option value="10">10 seconds</option>
+                      <option value="30">30 seconds</option>
+                      <option value="60">1 minute</option>
+                      <option value="300">5 minutes</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <div class="flex items-center space-x-2">
+                      <div :class="[
+                        'w-3 h-3 rounded-full',
+                        adminData.macMonitoring.isRunning ? 'bg-green-500' : 'bg-gray-400'
+                      ]"></div>
+                      <span class="text-sm text-gray-600">
+                        {{ adminData.macMonitoring.isRunning ? 'Running' : 'Stopped' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="flex space-x-3">
+                  <button 
+                    @click="startMacMonitoring"
+                    :disabled="adminData.macMonitoring.isRunning"
+                    class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🚀 Start Monitoring
+                  </button>
+                  <button 
+                    @click="stopMacMonitoring"
+                    :disabled="!adminData.macMonitoring.isRunning"
+                    class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🛑 Stop Monitoring
+                  </button>
+                  <button 
+                    @click="getMacStats"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    📊 View Stats
+                  </button>
+                </div>
+                
+                <!-- Mac System Stats -->
+                <div v-if="adminData.macMonitoring.currentStats" class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-600">CPU Usage</span>
+                      <span class="text-lg font-bold text-gray-900">{{ adminData.macMonitoring.currentStats.cpu }}%</span>
+                    </div>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-600">Memory Usage</span>
+                      <span class="text-lg font-bold text-gray-900">{{ adminData.macMonitoring.currentStats.memory }}%</span>
+                    </div>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-600">Disk Usage</span>
+                      <span class="text-lg font-bold text-gray-900">{{ adminData.macMonitoring.currentStats.disk }}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- vCenter Integration -->
+            <div v-if="adminData.selectedIntegration === 'vcenter'" class="bg-white rounded-xl shadow-sm p-6">
+              <h3 class="text-lg font-semibold mb-4">🏢 VMware vCenter Integration</h3>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">vCenter Host</label>
+                  <input v-model="adminData.connectionForms.vcenter.host" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="vcenter.local">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                  <input v-model="adminData.connectionForms.vcenter.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="administrator@vsphere.local">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <input v-model="adminData.connectionForms.vcenter.password" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <button @click="testConnection('vcenter')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  Test Connection & Ingest
+                </button>
+              </div>
+            </div>
+            
+            <!-- Zabbix Integration -->
+            <div v-if="adminData.selectedIntegration === 'zabbix'" class="bg-white rounded-xl shadow-sm p-6">
+              <h3 class="text-lg font-semibold mb-4">📊 Zabbix Integration</h3>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Zabbix API URL</label>
+                  <input v-model="adminData.connectionForms.zabbix.url" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="http://zabbix.local/api_jsonrpc.php">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                  <input v-model="adminData.connectionForms.zabbix.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Admin">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <input v-model="adminData.connectionForms.zabbix.password" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <button @click="testConnection('zabbix')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  Test Connection & Ingest
+                </button>
+              </div>
+            </div>
+            
+            <!-- Prometheus Integration -->
+            <div v-if="adminData.selectedIntegration === 'prometheus'" class="bg-white rounded-xl shadow-sm p-6">
+              <h3 class="text-lg font-semibold mb-4">🔥 Prometheus Integration</h3>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Prometheus URL</label>
+                  <input v-model="adminData.connectionForms.prometheus.url" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="http://localhost:9090">
+                </div>
+                <button @click="testConnection('prometheus')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  Test Connection & Ingest
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -424,7 +605,8 @@ export default {
         { id: 'overview', name: 'Overview', icon: 'layout-dashboard' },
         { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
         { id: 'vms', name: 'Virtual Machines', icon: 'server' },
-        { id: 'analytics', name: 'Analytics', icon: 'bar-chart-3' }
+        { id: 'analytics', name: 'Analytics', icon: 'bar-chart-3' },
+        { id: 'admin', name: 'Administration', icon: 'settings' }
       ],
       stats: [
         { title: 'Total VMs', value: '5', change: 0, icon: 'server', bgColor: 'bg-blue-500' },
@@ -438,7 +620,29 @@ export default {
         { id: 3, name: 'test-vm-01', status: 'running', cpu: 5, memory_usage: 17, cores: 2, memory: 4, cluster: 'test-cluster' },
         { id: 4, name: 'backup-vm-01', status: 'running', cpu: 5, memory_usage: 17, cores: 2, memory: 4, cluster: 'backup-cluster' },
         { id: 5, name: 'dev-server-01', status: 'running', cpu: 32, memory_usage: 48, cores: 4, memory: 16, cluster: 'dev-cluster' }
-      ]
+      ],
+      // Admin panel data
+      adminData: {
+        selectedIntegration: 'mac',
+        macMonitoring: {
+          isRunning: false,
+          interval: 30,
+          lastUpdate: null,
+          systemInfo: null,
+          currentStats: null
+        },
+        integrationOptions: [
+          { id: 'mac', name: 'Mac System', icon: '🍎', description: 'Monitor your Mac system resources' },
+          { id: 'vcenter', name: 'VMware vCenter', icon: '🏢', description: 'Connect to VMware vCenter Server' },
+          { id: 'zabbix', name: 'Zabbix', icon: '📊', description: 'Integrate with Zabbix monitoring' },
+          { id: 'prometheus', name: 'Prometheus', icon: '🔥', description: 'Connect to Prometheus metrics' }
+        ],
+        connectionForms: {
+          vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
+          zabbix: { url: 'http://zabbix.local/api_jsonrpc.php', username: 'Admin', password: '' },
+          prometheus: { url: 'http://localhost:9090' }
+        }
+      }
     }
   },
   computed: {
@@ -691,6 +895,92 @@ export default {
           }
         }
       })
+    },
+    
+    // Admin panel methods
+    async startMacMonitoring() {
+      try {
+        const response = await fetch('http://localhost:8001/admin/mac/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ interval: this.adminData.macMonitoring.interval })
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          this.adminData.macMonitoring.isRunning = true
+          this.adminData.macMonitoring.lastUpdate = new Date().toISOString()
+          console.log('Mac monitoring started:', result)
+          
+          // Refresh data to show new VMs
+          await this.loadData()
+        } else {
+          console.error('Failed to start Mac monitoring')
+        }
+      } catch (error) {
+        console.error('Error starting Mac monitoring:', error)
+      }
+    },
+    
+    async stopMacMonitoring() {
+      try {
+        const response = await fetch('http://localhost:8001/admin/mac/stop', {
+          method: 'POST'
+        })
+        
+        if (response.ok) {
+          this.adminData.macMonitoring.isRunning = false
+          console.log('Mac monitoring stopped')
+        } else {
+          console.error('Failed to stop Mac monitoring')
+        }
+      } catch (error) {
+        console.error('Error stopping Mac monitoring:', error)
+      }
+    },
+    
+    async getMacStats() {
+      try {
+        const response = await fetch('http://localhost:8001/admin/mac/stats')
+        
+        if (response.ok) {
+          const stats = await response.json()
+          this.adminData.macMonitoring.currentStats = {
+            cpu: stats.cpu_usage.toFixed(1),
+            memory: stats.memory_usage.toFixed(1),
+            disk: stats.disk_usage.toFixed(1)
+          }
+          this.adminData.macMonitoring.systemInfo = stats.system_info
+        } else {
+          console.error('Failed to get Mac stats')
+        }
+      } catch (error) {
+        console.error('Error getting Mac stats:', error)
+      }
+    },
+    
+    async testConnection(type) {
+      try {
+        const formData = this.adminData.connectionForms[type]
+        const response = await fetch(`http://localhost:8001/admin/${type}/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          console.log(`${type} connection successful:`, result)
+          alert(`✅ ${type} integration successful!`)
+        } else {
+          const error = await response.text()
+          console.error(`${type} connection failed:`, error)
+          alert(`❌ Failed to connect to ${type}: ${error}`)
+        }
+      } catch (error) {
+        console.error(`Error testing ${type} connection:`, error)
+        alert(`❌ Error testing ${type} connection: ${error.message}`)
+      }
     }
   }
 }
