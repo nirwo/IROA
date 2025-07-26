@@ -98,67 +98,14 @@ class ConnectionTestRequest(BaseModel):
     url: str = None
 
 # Admin endpoints
-@router.post("/admin/mac/start")
-async def start_mac_monitoring(request: MacMonitoringRequest):
-    global mac_monitor, monitoring_thread, monitoring_active
-    
-    if monitoring_active:
-        raise HTTPException(status_code=400, detail="Mac monitoring is already running")
-    
-    try:
-        # Try to import MacSystemMonitor
-        try:
-            from monitoring.mac_monitor import MacSystemMonitor
-            mac_monitor = MacSystemMonitor()
-            # Create initial VMs
-            mac_monitor.create_virtual_vms()
-            # Collect initial metrics
-            metrics = mac_monitor.collect_metrics()
-        except ImportError:
-            # Fallback if monitoring module unavailable
-            mac_monitor = None
-            metrics = {"message": "Mac monitoring service temporarily unavailable"}
-        
-        # Start background monitoring
-        monitoring_active = True
-        
-        def monitor_loop():
-            global monitoring_active
-            while monitoring_active:
-                try:
-                    mac_monitor.collect_metrics()
-                    time.sleep(request.interval)
-                except Exception as e:
-                    print(f"Error in monitoring loop: {e}")
-                    break
-        
-        monitoring_thread = threading.Thread(target=monitor_loop, daemon=True)
-        monitoring_thread.start()
-        
-        return {
-            "status": "started",
-            "interval": request.interval,
-            "vm_count": metrics.get('vm_count', 0),
-            "system_cpu": metrics.get('system_cpu', 0),
-            "system_memory": metrics.get('system_memory', 0)
-        }
-    except Exception as e:
-        monitoring_active = False
-        raise HTTPException(status_code=500, detail=f"Failed to start Mac monitoring: {str(e)}")
+# Mac monitoring endpoints disabled per user request
+# @router.post("/admin/mac/start")
+# async def start_mac_monitoring(request: MacMonitoringRequest):
+#     return {"status": "disabled", "message": "Mac monitoring has been disabled"}
 
-@router.post("/admin/mac/stop")
-async def stop_mac_monitoring():
-    global monitoring_active, mac_monitor
-    
-    if not monitoring_active:
-        raise HTTPException(status_code=400, detail="Mac monitoring is not running")
-    
-    monitoring_active = False
-    if mac_monitor:
-        mac_monitor.session.close()
-        mac_monitor = None
-    
-    return {"status": "stopped"}
+# @router.post("/admin/mac/stop")
+# async def stop_mac_monitoring():
+#     return {"status": "disabled", "message": "Mac monitoring has been disabled"}
 
 @router.get("/admin/mac/stats")
 async def get_mac_stats():
