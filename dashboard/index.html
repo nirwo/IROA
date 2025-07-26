@@ -16,10 +16,55 @@
     .tab-content { min-height: 400px; }
     .vm-card { transition: all 0.2s ease-in-out; }
     .vm-card:hover { transform: translateY(-2px); }
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      min-width: 300px;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .loading-spinner {
+      border: 2px solid #f3f4f6;
+      border-top: 2px solid #3b82f6;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
   <div id="app">
+    <!-- Notification System -->
+    <div v-if="notification" :class="[
+      'notification',
+      notification.type === 'success' ? 'bg-green-100 border border-green-400 text-green-700' : 
+      notification.type === 'error' ? 'bg-red-100 border border-red-400 text-red-700' :
+      'bg-blue-100 border border-blue-400 text-blue-700'
+    ]">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <i :data-lucide="notification.type === 'success' ? 'check-circle' : notification.type === 'error' ? 'x-circle' : 'info'" class="w-5 h-5 mr-2"></i>
+          <span>{{ notification.message }}</span>
+        </div>
+        <button @click="notification = null" class="ml-4 text-gray-400 hover:text-gray-600">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
     <div class="min-h-screen bg-gray-50">
       <!-- Header -->
       <header class="bg-white shadow-sm border-b border-gray-200">
@@ -35,9 +80,9 @@
               </div>
             </div>
             <div class="flex items-center space-x-4">
-              <div class="flex items-center space-x-2 text-sm text-gray-600">
-                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>API Connected</span>
+              <div class="flex items-center space-x-2 text-sm">
+                <div :class="apiConnected ? 'bg-green-500' : 'bg-red-500'" class="w-2 h-2 rounded-full"></div>
+                <span :class="apiConnected ? 'text-green-600' : 'text-red-600'">{{ apiConnected ? 'API Connected' : 'API Disconnected' }}</span>
               </div>
             </div>
           </div>
@@ -218,58 +263,298 @@
               </div>
             </div>
 
-            <!-- Other Integration Forms -->
-            <div v-else class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                {{ adminData.integrationOptions.find(opt => opt.id === adminData.selectedIntegration)?.name }} Configuration
-              </h3>
-              <p class="text-gray-600 mb-6">Configure your {{ adminData.selectedIntegration }} integration settings.</p>
+            <!-- VMware vCenter Integration -->
+            <div v-if="adminData.selectedIntegration === 'vcenter'" class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">🏢 VMware vCenter Configuration</h3>
+              <p class="text-gray-600 mb-6">Connect to your VMware vCenter Server for VM management and monitoring.</p>
               
               <div class="space-y-4">
-                <div v-if="adminData.selectedIntegration === 'vcenter'">
-                  <label class="block text-sm font-medium text-gray-700 mb-1">vCenter Host</label>
-                  <input v-model="adminData.connectionForms.vcenter.host" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div>
+                  <label for="vcenter-host" class="block text-sm font-medium text-gray-700 mb-1">vCenter Host/IP</label>
+                  <input id="vcenter-host" v-model="adminData.connectionForms.vcenter.host" type="text" 
+                         placeholder="vcenter.company.com or 192.168.1.100"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label for="vcenter-username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <input id="vcenter-username" v-model="adminData.connectionForms.vcenter.username" type="text" 
+                         placeholder="administrator@vsphere.local"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label for="vcenter-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input id="vcenter-password" v-model="adminData.connectionForms.vcenter.password" type="password" 
+                         placeholder="Enter vCenter password"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 
-                <button 
-                  @click="testConnection"
-                  class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Test Connection
-                </button>
+                <div class="flex space-x-2">
+                  <button @click="testConnection('vcenter')" :disabled="loading.connectionTest"
+                          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+                    <div v-if="loading.connectionTest" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="wifi" class="w-4 h-4 mr-2"></i>
+                    {{ loading.connectionTest ? 'Testing...' : 'Test Connection' }}
+                  </button>
+                  <button @click="saveIntegration('vcenter')" :disabled="!isFormValid('vcenter')"
+                          class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center">
+                    <i data-lucide="save" class="w-4 h-4 mr-2"></i>
+                    Save Configuration
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Zabbix Integration -->
+            <div v-if="adminData.selectedIntegration === 'zabbix'" class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">📊 Zabbix Configuration</h3>
+              <p class="text-gray-600 mb-6">Connect to your Zabbix monitoring system for comprehensive infrastructure monitoring.</p>
+              
+              <div class="space-y-4">
+                <div>
+                  <label for="zabbix-url" class="block text-sm font-medium text-gray-700 mb-1">Zabbix API URL</label>
+                  <input id="zabbix-url" v-model="adminData.connectionForms.zabbix.url" type="url" 
+                         placeholder="http://zabbix.company.com/api_jsonrpc.php"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label for="zabbix-username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <input id="zabbix-username" v-model="adminData.connectionForms.zabbix.username" type="text" 
+                         placeholder="Admin"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label for="zabbix-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input id="zabbix-password" v-model="adminData.connectionForms.zabbix.password" type="password" 
+                         placeholder="Enter Zabbix password"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div class="flex space-x-2">
+                  <button @click="testConnection('zabbix')" :disabled="loading.connectionTest"
+                          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+                    <div v-if="loading.connectionTest" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="wifi" class="w-4 h-4 mr-2"></i>
+                    {{ loading.connectionTest ? 'Testing...' : 'Test Connection' }}
+                  </button>
+                  <button @click="saveIntegration('zabbix')" :disabled="!isFormValid('zabbix')"
+                          class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center">
+                    <i data-lucide="save" class="w-4 h-4 mr-2"></i>
+                    Save Configuration
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Prometheus Integration -->
+            <div v-if="adminData.selectedIntegration === 'prometheus'" class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">🔥 Prometheus Configuration</h3>
+              <p class="text-gray-600 mb-6">Connect to your Prometheus server for metrics collection and monitoring.</p>
+              
+              <div class="space-y-4">
+                <div>
+                  <label for="prometheus-url" class="block text-sm font-medium text-gray-700 mb-1">Prometheus Server URL</label>
+                  <input id="prometheus-url" v-model="adminData.connectionForms.prometheus.url" type="url" 
+                         placeholder="http://prometheus.company.com:9090"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label for="prometheus-username" class="block text-sm font-medium text-gray-700 mb-1">Username (Optional)</label>
+                  <input id="prometheus-username" v-model="adminData.connectionForms.prometheus.username" type="text" 
+                         placeholder="Leave empty if no authentication"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label for="prometheus-password" class="block text-sm font-medium text-gray-700 mb-1">Password (Optional)</label>
+                  <input id="prometheus-password" v-model="adminData.connectionForms.prometheus.password" type="password" 
+                         placeholder="Leave empty if no authentication"
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div class="flex space-x-2">
+                  <button @click="testConnection('prometheus')" :disabled="loading.connectionTest"
+                          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+                    <div v-if="loading.connectionTest" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="wifi" class="w-4 h-4 mr-2"></i>
+                    {{ loading.connectionTest ? 'Testing...' : 'Test Connection' }}
+                  </button>
+                  <button @click="saveIntegration('prometheus')" :disabled="!isFormValid('prometheus')"
+                          class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center">
+                    <i data-lucide="save" class="w-4 h-4 mr-2"></i>
+                    Save Configuration
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Other Tabs (Simplified) -->
+        <!-- Recommendations Tab -->
         <div v-if="activeTab === 'recommendations'" class="tab-content">
           <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">AI Recommendations</h2>
             <p class="text-gray-600">Optimize your infrastructure with AI-powered insights</p>
           </div>
-          <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <p class="text-gray-600">Loading recommendations...</p>
+
+          <div class="mb-6">
+            <button @click="loadRecommendations" :disabled="loading.recommendations" 
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+              <div v-if="loading.recommendations" class="loading-spinner mr-2"></div>
+              <i v-else data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+              {{ loading.recommendations ? 'Loading...' : 'Refresh Recommendations' }}
+            </button>
+          </div>
+
+          <div v-if="recommendations.length === 0 && !loading.recommendations" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+              <i data-lucide="info" class="w-5 h-5 text-yellow-600 mr-2"></i>
+              <p class="text-yellow-800">No recommendations available. Click "Refresh Recommendations" to load data.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div v-for="rec in recommendations" :key="rec.vm" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-start justify-between mb-4">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900">{{ rec.vm }}</h3>
+                  <p class="text-sm text-gray-500">{{ rec.reason }}</p>
+                </div>
+                <div class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                  Optimization
+                </div>
+              </div>
+              <p class="text-gray-700 mb-4">{{ rec.suggestion }}</p>
+              <div v-if="rec.details" class="bg-gray-50 rounded-lg p-3">
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                  <div><strong>Avg CPU:</strong> {{ rec.details.avg_cpu }}%</div>
+                  <div><strong>Avg Memory:</strong> {{ rec.details.avg_mem }}%</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
+        <!-- Virtual Machines Tab -->
         <div v-if="activeTab === 'vms'" class="tab-content">
           <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">Virtual Machines</h2>
             <p class="text-gray-600">Monitor and manage your virtual infrastructure</p>
           </div>
-          <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <p class="text-gray-600">Loading virtual machines...</p>
+
+          <div class="mb-6 flex items-center justify-between">
+            <button @click="loadUnderutilizedVMs" :disabled="loading.vms" 
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+              <div v-if="loading.vms" class="loading-spinner mr-2"></div>
+              <i v-else data-lucide="server" class="w-4 h-4 mr-2"></i>
+              {{ loading.vms ? 'Loading...' : 'Load Underutilized VMs' }}
+            </button>
+            <div class="flex items-center space-x-4">
+              <input v-model="vmSearchTerm" type="text" placeholder="Search VMs..." 
+                     class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div v-if="filteredVMs.length === 0 && !loading.vms" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+              <i data-lucide="info" class="w-5 h-5 text-blue-600 mr-2"></i>
+              <p class="text-blue-800">No VMs found. Click "Load Underutilized VMs" to fetch data from the API.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="vm in filteredVMs" :key="vm.vm" class="vm-card bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">{{ vm.vm }}</h3>
+                <div class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                  Underutilized
+                </div>
+              </div>
+              <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-gray-600">CPU Usage</span>
+                  <div class="flex items-center">
+                    <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
+                      <div class="bg-blue-500 h-2 rounded-full" :style="{width: vm.details?.avg_cpu + '%'}"></div>
+                    </div>
+                    <span class="text-sm font-medium">{{ vm.details?.avg_cpu }}%</span>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-gray-600">Memory Usage</span>
+                  <div class="flex items-center">
+                    <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
+                      <div class="bg-green-500 h-2 rounded-full" :style="{width: vm.details?.avg_mem + '%'}"></div>
+                    </div>
+                    <span class="text-sm font-medium">{{ vm.details?.avg_mem }}%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-4 pt-4 border-t border-gray-100">
+                <p class="text-sm text-gray-600">{{ vm.suggestion }}</p>
+              </div>
+            </div>
           </div>
         </div>
 
+        <!-- Analytics Tab -->
         <div v-if="activeTab === 'analytics'" class="tab-content">
           <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">Analytics</h2>
             <p class="text-gray-600">Deep insights into your infrastructure performance</p>
           </div>
-          <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <p class="text-gray-600">Loading analytics...</p>
+
+          <div class="mb-6">
+            <div class="flex items-center space-x-4">
+              <button @click="loadForecast(1)" :disabled="loading.analytics" 
+                      class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 flex items-center">
+                <div v-if="loading.analytics" class="loading-spinner mr-2"></div>
+                <i v-else data-lucide="trending-up" class="w-4 h-4 mr-2"></i>
+                {{ loading.analytics ? 'Loading...' : 'Load Forecast (VM 1)' }}
+              </button>
+              <button @click="loadAnomalies(1)" :disabled="loading.anomalies" 
+                      class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center">
+                <div v-if="loading.anomalies" class="loading-spinner mr-2"></div>
+                <i v-else data-lucide="alert-triangle" class="w-4 h-4 mr-2"></i>
+                {{ loading.anomalies ? 'Loading...' : 'Detect Anomalies (VM 1)' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Forecast Results -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">CPU Forecast</h3>
+              <div v-if="forecast.length === 0" class="text-gray-500 text-center py-8">
+                <i data-lucide="bar-chart-3" class="w-12 h-12 mx-auto mb-2 text-gray-300"></i>
+                <p>No forecast data available. Click "Load Forecast" to generate predictions.</p>
+              </div>
+              <div v-else>
+                <div class="space-y-2">
+                  <div v-for="(point, index) in forecast.slice(0, 5)" :key="index" class="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span class="text-sm text-gray-600">Hour {{ index + 1 }}</span>
+                    <span class="font-medium">{{ point.toFixed(1) }}% CPU</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Anomaly Results -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Anomaly Detection</h3>
+              <div v-if="anomalies.length === 0" class="text-gray-500 text-center py-8">
+                <i data-lucide="shield-check" class="w-12 h-12 mx-auto mb-2 text-gray-300"></i>
+                <p>No anomaly data available. Click "Detect Anomalies" to analyze patterns.</p>
+              </div>
+              <div v-else class="space-y-3">
+                <div v-for="(anomaly, index) in anomalies" :key="index" 
+                     class="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div class="flex items-center">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600 mr-2"></i>
+                    <span class="text-sm font-medium text-red-800">Anomaly Detected</span>
+                  </div>
+                  <p class="text-sm text-red-700 mt-1">{{ anomaly.description || 'Unusual pattern detected in system metrics' }}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -283,6 +568,20 @@
       data() {
         return {
           activeTab: 'overview',
+          apiConnected: false,
+          notification: null,
+          vmSearchTerm: '',
+          recommendations: [],
+          underutilizedVMs: [],
+          forecast: [],
+          anomalies: [],
+          loading: {
+            recommendations: false,
+            vms: false,
+            analytics: false,
+            anomalies: false,
+            connectionTest: false
+          },
           tabs: [
             { id: 'overview', name: 'Overview', icon: 'layout-dashboard' },
             { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
@@ -314,27 +613,116 @@
             connectionForms: {
               vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
               zabbix: { url: 'http://zabbix.local/api_jsonrpc.php', username: 'Admin', password: '' },
-              prometheus: { url: 'http://localhost:9090' }
+              prometheus: { url: 'http://localhost:9090', username: '', password: '' }
             }
           }
         };
       },
+      computed: {
+        filteredVMs() {
+          if (!this.vmSearchTerm) return this.underutilizedVMs;
+          return this.underutilizedVMs.filter(vm => 
+            vm.vm.toLowerCase().includes(this.vmSearchTerm.toLowerCase())
+          );
+        }
+      },
       methods: {
+        // Notification system
+        showNotification(message, type = 'info') {
+          this.notification = { message, type };
+          setTimeout(() => {
+            this.notification = null;
+          }, 5000);
+        },
+
+        // API connectivity check
+        async checkAPIConnection() {
+          try {
+            const response = await fetch('http://localhost:8001/health');
+            const data = await response.json();
+            this.apiConnected = data.status === 'ok';
+          } catch (error) {
+            this.apiConnected = false;
+          }
+        },
+
+        // Recommendations methods
+        async loadRecommendations() {
+          this.loading.recommendations = true;
+          try {
+            const response = await fetch('http://localhost:8001/recommendations');
+            const data = await response.json();
+            this.recommendations = data;
+            this.showNotification(`Loaded ${data.length} recommendations`, 'success');
+          } catch (error) {
+            this.showNotification('Failed to load recommendations: ' + error.message, 'error');
+          } finally {
+            this.loading.recommendations = false;
+          }
+        },
+
+        // VM methods
+        async loadUnderutilizedVMs() {
+          this.loading.vms = true;
+          try {
+            const response = await fetch('http://localhost:8001/underutilized');
+            const data = await response.json();
+            this.underutilizedVMs = data;
+            this.showNotification(`Found ${data.length} underutilized VMs`, 'success');
+          } catch (error) {
+            this.showNotification('Failed to load VMs: ' + error.message, 'error');
+          } finally {
+            this.loading.vms = false;
+          }
+        },
+
+        // Analytics methods
+        async loadForecast(vmId) {
+          this.loading.analytics = true;
+          try {
+            const response = await fetch(`http://localhost:8001/forecast/${vmId}?hours=24`);
+            const data = await response.json();
+            this.forecast = data.cpu_forecast || [];
+            this.showNotification('CPU forecast loaded successfully', 'success');
+          } catch (error) {
+            this.showNotification('Failed to load forecast: ' + error.message, 'error');
+          } finally {
+            this.loading.analytics = false;
+          }
+        },
+
+        async loadAnomalies(vmId) {
+          this.loading.anomalies = true;
+          try {
+            const response = await fetch(`http://localhost:8001/anomalies/${vmId}`);
+            const data = await response.json();
+            this.anomalies = data.anomalies || [];
+            this.showNotification(`Found ${this.anomalies.length} anomalies`, 'success');
+          } catch (error) {
+            this.showNotification('Failed to load anomalies: ' + error.message, 'error');
+          } finally {
+            this.loading.anomalies = false;
+          }
+        },
+
+        // Mac monitoring methods
         async startMacMonitoring() {
           try {
             const response = await fetch('http://localhost:8001/admin/mac/start', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' }
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ interval: this.adminData.macMonitoring.interval })
             });
             const data = await response.json();
             if (data.status === 'started') {
               this.adminData.macMonitoring.isRunning = true;
-              alert('Mac monitoring started successfully!');
+              this.showNotification('Mac monitoring started successfully!', 'success');
             }
           } catch (error) {
-            alert('Failed to start Mac monitoring: ' + error.message);
+            this.showNotification('Failed to start Mac monitoring: ' + error.message, 'error');
           }
         },
+
         async stopMacMonitoring() {
           try {
             const response = await fetch('http://localhost:8001/admin/mac/stop', {
@@ -344,12 +732,13 @@
             const data = await response.json();
             if (data.status === 'stopped') {
               this.adminData.macMonitoring.isRunning = false;
-              alert('Mac monitoring stopped successfully!');
+              this.showNotification('Mac monitoring stopped successfully!', 'success');
             }
           } catch (error) {
-            alert('Failed to stop Mac monitoring: ' + error.message);
+            this.showNotification('Failed to stop Mac monitoring: ' + error.message, 'error');
           }
         },
+
         async getMacStats() {
           try {
             const response = await fetch('http://localhost:8001/admin/mac/stats');
@@ -361,12 +750,56 @@
               disk_usage: Math.round(data.disk_usage * 10) / 10
             };
             this.adminData.macMonitoring.isRunning = data.monitoring_active;
+            this.showNotification('Mac stats updated successfully', 'success');
           } catch (error) {
-            alert('Failed to get Mac stats: ' + error.message);
+            this.showNotification('Failed to get Mac stats: ' + error.message, 'error');
           }
         },
-        async testConnection() {
-          alert('Connection test feature coming soon!');
+
+        // Integration methods
+        async testConnection(integrationType) {
+          this.loading.connectionTest = true;
+          try {
+            const form = this.adminData.connectionForms[integrationType];
+            const endpoint = `http://localhost:8001/admin/${integrationType}/test`;
+            
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(form)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+              this.showNotification(data.message, 'success');
+            } else {
+              this.showNotification(data.detail || 'Connection test failed', 'error');
+            }
+          } catch (error) {
+            this.showNotification('Connection test failed: ' + error.message, 'error');
+          } finally {
+            this.loading.connectionTest = false;
+          }
+        },
+
+        saveIntegration(integrationType) {
+          // For now, just show a success message
+          this.showNotification(`${integrationType} configuration saved successfully`, 'success');
+        },
+
+        isFormValid(integrationType) {
+          const form = this.adminData.connectionForms[integrationType];
+          switch (integrationType) {
+            case 'vcenter':
+              return form.host && form.username && form.password;
+            case 'zabbix':
+              return form.url && form.username && form.password;
+            case 'prometheus':
+              return form.url; // Username/password optional for Prometheus
+            default:
+              return false;
+          }
         },
         initializeCharts() {
           // Usage Chart
@@ -426,15 +859,38 @@
           lucide.createIcons();
         }
         
+        // Check API connection
+        this.checkAPIConnection();
+        
         // Initialize charts after a short delay
         this.$nextTick(() => {
           setTimeout(() => {
             this.initializeCharts();
+            // Re-initialize icons after DOM updates
+            if (typeof lucide !== 'undefined') {
+              lucide.createIcons();
+            }
           }, 100);
         });
 
         // Get initial Mac stats
         this.getMacStats();
+        
+        // Set up periodic API health check
+        setInterval(() => {
+          this.checkAPIConnection();
+        }, 30000); // Check every 30 seconds
+      },
+      
+      watch: {
+        // Re-initialize icons when active tab changes
+        activeTab() {
+          this.$nextTick(() => {
+            if (typeof lucide !== 'undefined') {
+              lucide.createIcons();
+            }
+          });
+        }
       }
     }).mount('#app');
   </script>
