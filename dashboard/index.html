@@ -576,6 +576,7 @@
           activeTab: localStorage.getItem('iroa-active-tab') || 'overview',
           apiConnected: false,
           notification: null,
+          notificationTimeout: null,
           vmSearchTerm: '',
           recommendations: [],
           underutilizedVMs: [],
@@ -645,29 +646,45 @@
           }
         },
 
-        // Notification system
+        // Notification system with proper Vue reactivity
         showNotification(message, type = 'info') {
-          this.notification = { message, type };
-          setTimeout(() => {
-            this.notification = null;
-          }, 5000);
+          // Clear any existing notification first
+          if (this.notificationTimeout) {
+            clearTimeout(this.notificationTimeout);
+          }
+          
+          // Use Vue's nextTick to ensure DOM is ready
+          this.$nextTick(() => {
+            this.notification = { message, type };
+            this.notificationTimeout = setTimeout(() => {
+              this.notification = null;
+              this.notificationTimeout = null;
+            }, 5000);
+          });
         },
 
-        // API connectivity check
+        // API connectivity check with proper error handling
         async checkAPIConnection() {
           try {
             const response = await fetch('http://localhost:8001/health');
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
             const data = await response.json();
             this.apiConnected = data.status === 'ok';
           } catch (error) {
+            console.warn('API connection check failed:', error);
             this.apiConnected = false;
           }
         },
 
-        // System information
+        // System information with proper error handling
         async loadSystemInfo() {
           try {
             const response = await fetch('http://localhost:8001/system/info');
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
             const data = await response.json();
             this.systemInfo = data;
             
@@ -947,46 +964,49 @@
           }
         }
       },
-      mounted() {
-        // Initialize Lucide icons
-        if (typeof lucide !== 'undefined') {
-          lucide.createIcons();
-        }
-        
-        // Check API connection
-        this.checkAPIConnection();
-        
-        // Load system information for dynamic OS detection
-        this.loadSystemInfo();
-        
-        // Always load VMs on startup with proper error handling
-        this.loadUnderutilizedVMs();
-        
-        // Also load VMs when switching to VMs tab
-        setTimeout(() => {
-          if (this.activeTab === 'vms' && this.underutilizedVMs.length === 0) {
-            this.loadUnderutilizedVMs();
+      async mounted() {
+        try {
+          // Initialize Lucide icons first
+          if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
           }
-        }, 1000);
-        
-        // Initialize charts after a short delay
-        this.$nextTick(() => {
-          setTimeout(() => {
-            this.initializeCharts();
-            // Re-initialize icons after DOM updates
-            if (typeof lucide !== 'undefined') {
-              lucide.createIcons();
-            }
-          }, 100);
-        });
+          
+          // Sequence async operations to prevent race conditions
+          await this.checkAPIConnection();
+          
+          // Load system information for dynamic OS detection
+          await this.loadSystemInfo();
+          
+          // Load VMs after system info is available
+          await this.loadUnderutilizedVMs();
+          
+          // Initialize charts after DOM is stable
+          this.$nextTick(() => {
+            setTimeout(() => {
+              this.initializeCharts();
+              // Re-initialize icons after DOM updates
+              if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+              }
+            }, 200);
+          });
 
-        // Get initial system stats
-        this.getMacStats();
-        
-        // Set up periodic API health check
-        setInterval(() => {
-          this.checkAPIConnection();
-        }, 30000); // Check every 30 seconds
+          // Get initial system stats (non-blocking)
+          this.getMacStats().catch(err => {
+            console.warn('Failed to load Mac stats:', err);
+          });
+          
+          // Set up periodic API health check
+          setInterval(() => {
+            this.checkAPIConnection().catch(err => {
+              console.warn('API health check failed:', err);
+            });
+          }, 30000);
+          
+        } catch (error) {
+          console.error('Error during component mounting:', error);
+          this.showNotification('Failed to initialize dashboard', 'error');
+        }
       },
       
       watch: {
