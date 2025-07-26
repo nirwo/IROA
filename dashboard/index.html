@@ -660,7 +660,7 @@
                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 
-                <div class="flex space-x-2">
+                <div class="flex space-x-2 flex-wrap gap-2">
                   <button @click="testConnection('vcenter')" :disabled="loading.connectionTest"
                           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
                     <div v-if="loading.connectionTest" class="loading-spinner mr-2"></div>
@@ -671,6 +671,12 @@
                           class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center">
                     <i data-lucide="save" class="w-4 h-4 mr-2"></i>
                     Save Configuration
+                  </button>
+                  <button @click="syncVCenterVMs()" :disabled="loading.vcenterSync || !isFormValid('vcenter')"
+                          class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 flex items-center">
+                    <div v-if="loading.vcenterSync" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="download" class="w-4 h-4 mr-2"></i>
+                    {{ loading.vcenterSync ? 'Syncing...' : 'Sync VMs' }}
                   </button>
                 </div>
               </div>
@@ -1034,7 +1040,8 @@
             connectionTest: false,
             capacity: false,
             licenses: false,
-            profiles: false
+            profiles: false,
+            vcenterSync: false
           },
           apiBaseUrl: window.location.protocol + '//' + window.location.hostname + ':8001',
           tabs: [
@@ -1644,6 +1651,60 @@
         cancelLicenseForm() {
           this.showAddLicenseForm = false;
           this.resetLicenseForm();
+        },
+
+        // vCenter VM Sync Method
+        async syncVCenterVMs() {
+          console.log('🔄 Starting vCenter VM sync...');
+          this.loading.vcenterSync = true;
+          
+          try {
+            const form = this.adminData.connectionForms.vcenter;
+            
+            // Enhanced credential validation
+            if (!form.host || !form.username || !form.password) {
+              this.showNotification('Please enter complete vCenter credentials before syncing VMs', 'error');
+              return;
+            }
+            
+            console.log('📤 Syncing VMs from vCenter:', form.host);
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/vcenter/sync-with-credentials`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                host: form.host,
+                username: form.username,
+                password: form.password
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+              console.log('✅ vCenter VM sync successful:', data);
+              this.showNotification(
+                `Successfully synced ${data.vm_count} VMs from vCenter (${data.underutilized_count} underutilized)`, 
+                'success'
+              );
+              
+              // Automatically refresh VM list to show synced data
+              await this.loadUnderutilizedVMs();
+              
+              // Switch to VMs tab to show results
+              this.setActiveTab('vms');
+              
+            } else {
+              console.error('❌ vCenter sync failed:', data);
+              this.showNotification(data.detail || 'Failed to sync VMs from vCenter', 'error');
+            }
+            
+          } catch (error) {
+            console.error('❌ vCenter sync error:', error);
+            this.showNotification('Failed to sync VMs from vCenter: ' + error.message, 'error');
+          } finally {
+            this.loading.vcenterSync = false;
+          }
         },
 
         async loadProfilePreview() {

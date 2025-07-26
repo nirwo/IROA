@@ -253,7 +253,7 @@ async def test_vcenter_connection(request: ConnectionTestRequest):
             "message": f"Successfully authenticated to vCenter at {request.host}",
             "host": request.host,
             "username": request.username,
-            "datacenter_count": datacenter_count,
+            "datacenters": datacenter_count,
             "connection_type": "full"
         }
         
@@ -265,6 +265,185 @@ async def test_vcenter_connection(request: ConnectionTestRequest):
             raise HTTPException(status_code=400, detail=f"Cannot reach vCenter host {request.host}")
         else:
             raise HTTPException(status_code=500, detail=f"vCenter connection failed: {error_msg}")
+
+@router.post("/admin/vcenter/sync")
+async def sync_vcenter_vms():
+    """Pull all VM data from vCenter using saved credentials"""
+    print("🔄 Starting vCenter VM sync...")
+    
+    try:
+        # Load saved vCenter configuration
+        config = load_integration_config()
+        vcenter_config = config.get('vcenter')
+        
+        if not vcenter_config:
+            raise HTTPException(status_code=400, detail="No vCenter configuration found. Please save vCenter credentials first.")
+        
+        host = vcenter_config.get('host')
+        username = vcenter_config.get('username')
+        
+        if not host or not username:
+            raise HTTPException(status_code=400, detail="Incomplete vCenter configuration. Please reconfigure vCenter connection.")
+        
+        print(f"🏢 Connecting to vCenter: {host}")
+        
+        # Try to import vCenter SDK
+        try:
+            from pyVim.connect import SmartConnect, Disconnect
+            from pyVmomi import vim
+            import ssl
+        except ImportError:
+            raise HTTPException(status_code=500, detail="vCenter SDK (pyVmomi) not available. Cannot sync VM data.")
+        
+        # Note: In production, you'd retrieve password from secure storage
+        # For now, we'll return instructions for manual sync
+        return {
+            "status": "info",
+            "message": "vCenter VM sync requires re-entering credentials for security",
+            "instructions": [
+                "1. Go to Administration tab",
+                "2. Select VMware vCenter", 
+                "3. Re-enter your vCenter credentials",
+                "4. Click 'Sync VMs' button that will appear after successful connection"
+            ],
+            "host": host,
+            "username": username
+        }
+        
+    except Exception as e:
+        print(f"❌ vCenter sync failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"vCenter sync failed: {str(e)}")
+
+@router.post("/admin/vcenter/sync-with-credentials")
+async def sync_vcenter_vms_with_credentials(request: ConnectionTestRequest):
+    """Pull all VM data from vCenter with provided credentials"""
+    print("🔄 Starting vCenter VM sync with credentials...")
+    
+    if not request.host or not request.username or not request.password:
+        raise HTTPException(status_code=400, detail="Missing vCenter credentials for VM sync")
+    
+    try:
+        # Import vCenter SDK
+        try:
+            from pyVim.connect import SmartConnect, Disconnect
+            from pyVmomi import vim
+            import ssl
+        except ImportError:
+            raise HTTPException(status_code=500, detail="vCenter SDK (pyVmomi) not available. Install with: pip install pyvmomi")
+        
+        print(f"🏢 Connecting to vCenter: {request.host}")
+        
+        # Create SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context.verify_mode = ssl.CERT_NONE
+        
+        # Connect to vCenter
+        si = SmartConnect(
+            host=request.host,
+            user=request.username,
+            pwd=request.password,
+            sslContext=context,
+            port=443
+        )
+        
+        if not si:
+            raise HTTPException(status_code=400, detail="Failed to connect to vCenter")
+        
+        print("✅ Connected to vCenter, retrieving VM data...")
+        
+        # Get content and find all VMs
+        content = si.RetrieveContent()
+        container = content.viewManager.CreateContainerView(
+            content.rootFolder, [vim.VirtualMachine], True
+        )
+        
+        vms_data = []
+        vm_count = 0
+        
+        for vm in container.view:
+            try:
+                vm_count += 1
+                print(f"📊 Processing VM {vm_count}: {vm.name}")
+                
+                # Get VM summary
+                summary = vm.summary
+                config = summary.config
+                runtime = summary.runtime
+                
+                # Get resource usage
+                cpu_usage = 0
+                memory_usage = 0
+                
+                if summary.quickStats:
+                    # Calculate CPU usage percentage
+                    if config.numCpu and summary.quickStats.overallCpuUsage:
+                        cpu_usage = (summary.quickStats.overallCpuUsage / (config.numCpu * 1000)) * 100
+                    
+                    # Calculate memory usage percentage  
+                    if config.memorySizeMB and summary.quickStats.guestMemoryUsage:
+                        memory_usage = (summary.quickStats.guestMemoryUsage / config.memorySizeMB) * 100
+                
+                # Determine if VM is underutilized
+                is_underutilized = cpu_usage < 30 and memory_usage < 50
+                
+                vm_data = {
+                    "vm": vm.name,
+                    "status": runtime.powerState.lower() if runtime.powerState else "unknown",
+                    "cpu": round(cpu_usage, 2),
+                    "memory_usage": round(memory_usage, 2),
+                    "cores": config.numCpu if config.numCpu else 0,
+                    "memory": round(config.memorySizeMB / 1024, 2) if config.memorySizeMB else 0,
+                    "cluster": vm.runtime.host.parent.name if vm.runtime.host and vm.runtime.host.parent else "unknown",
+                    "source": "vcenter",
+                    "details": {
+                        "avg_cpu": round(cpu_usage, 2),
+                        "avg_mem": round(memory_usage, 2),
+                        "disk_usage": round((summary.storage.committed / summary.storage.provisioned * 100), 2) if summary.storage and summary.storage.provisioned > 0 else 0
+                    },
+                    "suggestion": "Consider rightsizing this VM" if is_underutilized else "VM utilization is normal",
+                    "guest_os": config.guestFullName if config.guestFullName else "Unknown",
+                    "tools_status": summary.guest.toolsStatus if summary.guest else "unknown",
+                    "uuid": config.uuid if config.uuid else ""
+                }
+                
+                vms_data.append(vm_data)
+                
+            except Exception as vm_error:
+                print(f"⚠️ Error processing VM {vm.name}: {str(vm_error)}")
+                continue
+        
+        # Clean up
+        container.Destroy()
+        Disconnect(si)
+        
+        print(f"✅ Successfully synced {len(vms_data)} VMs from vCenter")
+        
+        # Store the synced data (you could save to database here)
+        global vcenter_vms_cache
+        vcenter_vms_cache = vms_data
+        
+        return {
+            "status": "success",
+            "message": f"Successfully synced {len(vms_data)} VMs from vCenter {request.host}",
+            "vm_count": len(vms_data),
+            "underutilized_count": len([vm for vm in vms_data if vm['cpu'] < 30 and vm['memory_usage'] < 50]),
+            "vms": vms_data[:5],  # Return first 5 VMs as preview
+            "sync_timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ vCenter VM sync failed: {error_msg}")
+        
+        if "Authentication failure" in error_msg or "Login failure" in error_msg:
+            raise HTTPException(status_code=401, detail="vCenter authentication failed - check username/password")
+        elif "Name or service not known" in error_msg or "No route to host" in error_msg:
+            raise HTTPException(status_code=400, detail=f"Cannot reach vCenter host {request.host}")
+        else:
+            raise HTTPException(status_code=500, detail=f"vCenter VM sync failed: {error_msg}")
+
+# Global cache for vCenter VMs (in production, use proper database)
+vcenter_vms_cache = []
 
 # Configuration persistence
 CONFIG_FILE = "config/integrations.json"
@@ -527,9 +706,20 @@ async def get_all_vms():
             }
         }
         
-        # Combine all VMs
-        all_vms = [system_vm] + underutilized
-        return all_vms
+        # Combine all VMs: system VM + traditional underutilized + vCenter synced VMs
+        all_vms = [system_vm] + underutilized + vcenter_vms_cache
+        
+        # Remove duplicates based on VM name (keep vCenter data if available)
+        unique_vms = {}
+        for vm in all_vms:
+            vm_name = vm.get('vm', 'unknown')
+            # Prioritize vCenter data over other sources
+            if vm_name not in unique_vms or vm.get('source') == 'vcenter':
+                unique_vms[vm_name] = vm
+        
+        final_vms = list(unique_vms.values())
+        print(f"📊 Returning {len(final_vms)} VMs (including {len(vcenter_vms_cache)} from vCenter)")
+        return final_vms
         
     except Exception as e:
         # If everything fails, return sample VM data
