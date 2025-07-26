@@ -635,9 +635,14 @@
       },
       methods: {
         // Tab management
-        setActiveTab(tabId) {
-          this.activeTab = tabId;
-          localStorage.setItem('iroa-active-tab', tabId);
+        setActiveTab(tab) {
+          this.activeTab = tab;
+          localStorage.setItem('iroa-active-tab', tab);
+          
+          // Auto-load VMs when switching to VMs tab
+          if (tab === 'vms' && this.underutilizedVMs.length === 0) {
+            this.loadUnderutilizedVMs();
+          }
         },
 
         // Notification system
@@ -955,9 +960,14 @@
         this.loadSystemInfo();
         
         // Always load VMs on startup with proper error handling
+        this.loadUnderutilizedVMs();
+        
+        // Also load VMs when switching to VMs tab
         setTimeout(() => {
-          this.loadUnderutilizedVMs();
-        }, 500); // Small delay to ensure API is ready
+          if (this.activeTab === 'vms' && this.underutilizedVMs.length === 0) {
+            this.loadUnderutilizedVMs();
+          }
+        }, 1000);
         
         // Initialize charts after a short delay
         this.$nextTick(() => {
