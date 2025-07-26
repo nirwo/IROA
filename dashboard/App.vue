@@ -76,13 +76,17 @@
           <!-- Resource Usage Chart -->
           <div class="bg-white rounded-xl shadow-sm p-6">
             <h3 class="text-lg font-semibold mb-4">Resource Usage Trends</h3>
-            <canvas ref="usageChart" class="w-full h-64"></canvas>
+            <div class="h-64 relative">
+              <canvas ref="usageChart" class="w-full h-full"></canvas>
+            </div>
           </div>
           
           <!-- VM Distribution -->
           <div class="bg-white rounded-xl shadow-sm p-6">
             <h3 class="text-lg font-semibold mb-4">VM Distribution by Cluster</h3>
-            <canvas ref="distributionChart" class="w-full h-64"></canvas>
+            <div class="h-64 relative">
+              <canvas ref="distributionChart" class="w-full h-full"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -360,7 +364,9 @@
             <h3 class="text-lg font-semibold mb-4">CPU Usage Forecast</h3>
             <div v-if="selectedVM">
               <p class="text-sm text-gray-600 mb-4">24-hour prediction for {{ selectedVM.name }}</p>
-              <canvas ref="forecastChart" class="w-full h-64"></canvas>
+              <div class="h-64 relative">
+                <canvas ref="forecastChart" class="w-full h-full"></canvas>
+              </div>
             </div>
             <div v-else class="flex items-center justify-center h-64 text-gray-500">
               <div class="text-center">
@@ -458,11 +464,30 @@ export default {
     }
   },
   async mounted() {
-    await this.loadData()
-    this.initializeCharts()
-    // Initialize Lucide icons
-    if (window.lucide) {
-      window.lucide.createIcons()
+    try {
+      await this.loadData()
+      // Wait for DOM to be ready before initializing charts
+      this.$nextTick(() => {
+        this.initializeCharts()
+      })
+      // Initialize Lucide icons
+      if (window.lucide) {
+        window.lucide.createIcons()
+      }
+    } catch (error) {
+      console.error('Error during component mounting:', error)
+    }
+  },
+  beforeUnmount() {
+    // Clean up charts to prevent memory leaks
+    if (this.usageChart) {
+      this.usageChart.destroy()
+    }
+    if (this.distributionChart) {
+      this.distributionChart.destroy()
+    }
+    if (this.forecastChart) {
+      this.forecastChart.destroy()
     }
   },
   methods: {
@@ -471,16 +496,28 @@ export default {
       try {
         // Load recommendations
         const recRes = await fetch('http://localhost:8001/recommendations')
-        this.recommendations = await recRes.json()
+        if (recRes.ok) {
+          this.recommendations = await recRes.json()
+        } else {
+          console.warn('Failed to load recommendations:', recRes.status)
+          this.recommendations = []
+        }
         
         // Load underutilized VMs
         const underRes = await fetch('http://localhost:8001/underutilized')
-        this.underutilizedVMs = await underRes.json()
-        
-        // Update stats
-        this.stats[1].value = this.underutilizedVMs.length.toString()
+        if (underRes.ok) {
+          this.underutilizedVMs = await underRes.json()
+          // Update stats
+          this.stats[1].value = this.underutilizedVMs.length.toString()
+        } else {
+          console.warn('Failed to load underutilized VMs:', underRes.status)
+          this.underutilizedVMs = []
+        }
       } catch (error) {
         console.error('Error loading data:', error)
+        // Set default values on error
+        this.recommendations = []
+        this.underutilizedVMs = []
       } finally {
         this.loading = false
       }
@@ -492,17 +529,23 @@ export default {
     async getVMForecast(vmId) {
       try {
         const res = await fetch(`http://localhost:8001/forecast/${vmId}`)
-        const data = await res.json()
-        this.forecast = data.cpu_forecast
-        this.selectedVM = this.mockVMs.find(vm => vm.id === vmId)
-        this.activeTab = 'analytics'
-        
-        // Update forecast chart
-        setTimeout(() => {
-          this.initializeForecastChart()
-        }, 100)
+        if (res.ok) {
+          const data = await res.json()
+          this.forecast = data.cpu_forecast || []
+          this.selectedVM = this.mockVMs.find(vm => vm.id === vmId)
+          this.activeTab = 'analytics'
+          
+          // Update forecast chart
+          this.$nextTick(() => {
+            this.initializeForecastChart()
+          })
+        } else {
+          console.warn('Failed to load forecast:', res.status)
+          this.forecast = []
+        }
       } catch (error) {
         console.error('Error loading forecast:', error)
+        this.forecast = []
       }
     },
     async getAnomalies(vmId) {
@@ -523,12 +566,21 @@ export default {
       return new Date(dateString).toLocaleString()
     },
     initializeCharts() {
-      this.initializeUsageChart()
-      this.initializeDistributionChart()
+      try {
+        this.initializeUsageChart()
+        this.initializeDistributionChart()
+      } catch (error) {
+        console.error('Error initializing charts:', error)
+      }
     },
     initializeUsageChart() {
       const ctx = this.$refs.usageChart
       if (!ctx) return
+      
+      // Destroy existing chart if it exists
+      if (this.usageChart) {
+        this.usageChart.destroy()
+      }
       
       this.usageChart = new Chart(ctx, {
         type: 'line',
@@ -569,6 +621,11 @@ export default {
       const ctx = this.$refs.distributionChart
       if (!ctx) return
       
+      // Destroy existing chart if it exists
+      if (this.distributionChart) {
+        this.distributionChart.destroy()
+      }
+      
       this.distributionChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -597,6 +654,11 @@ export default {
     initializeForecastChart() {
       const ctx = this.$refs.forecastChart
       if (!ctx || !this.forecast.length) return
+      
+      // Destroy existing chart if it exists
+      if (this.forecastChart) {
+        this.forecastChart.destroy()
+      }
       
       const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`)
       
