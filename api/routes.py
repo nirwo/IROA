@@ -1052,19 +1052,24 @@ async def get_prometheus_system_metrics():
 
 @router.get("/vms")
 async def get_all_vms():
-    """Get all VMs including system, underutilized, and vCenter VMs"""
+    """Get all VMs from various sources (system, underutilized, vCenter)"""
     try:
+        print(f"🔍 Starting VMs endpoint - vCenter cache has {len(vcenter_vms_cache)} VMs")
+        
         # Try to get traditional underutilized VMs
         try:
             from analysis.engine import get_underutilized_vms
             underutilized = get_underutilized_vms()
+            print(f"📋 Got {len(underutilized)} underutilized VMs")
         except ImportError:
             # Fallback if analysis module unavailable
             underutilized = []
+            print(f"⚠️ Analysis module unavailable, using empty underutilized list")
         
         # Get system metrics from Prometheus with error handling
         try:
             system_metrics_response = await get_prometheus_system_metrics()
+            print(f"✅ Got Prometheus system metrics for {system_metrics_response.get('hostname', 'unknown')}")
         except Exception as e:
             print(f"⚠️ Failed to get Prometheus metrics: {e}")
             # Create fallback system VM
@@ -1079,6 +1084,7 @@ async def get_all_vms():
             }
         
         # Create system VM entry
+        print(f"🖥️ Creating system VM entry")
         system_vm = {
             "vm": system_metrics_response["hostname"],
             "status": "running",
@@ -1096,7 +1102,9 @@ async def get_all_vms():
         }
         
         # Combine all VMs: system VM + traditional underutilized + vCenter synced VMs
+        print(f"🔗 Combining VMs: 1 system + {len(underutilized)} underutilized + {len(vcenter_vms_cache)} vCenter")
         all_vms = [system_vm] + underutilized + vcenter_vms_cache
+        print(f"📊 Total VMs before deduplication: {len(all_vms)}")
         
         # Remove duplicates based on VM name (keep vCenter data if available)
         unique_vms = {}
