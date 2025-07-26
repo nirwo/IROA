@@ -986,9 +986,10 @@
             ],
             connectionForms: {
               vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
-              zabbix: { url: 'http://zabbix.local/api_jsonrpc.php', username: 'Admin', password: '' },
+              zabbix: { url: 'http://zabbix.local', username: 'admin', password: '' },
               prometheus: { url: 'http://localhost:9090', username: '', password: '' }
-            }
+            },
+            savedIntegrations: {}
           }
         };
       },
@@ -1438,9 +1439,60 @@
           }
         },
 
-        saveIntegration(integrationType) {
-          // For now, just show a success message
-          this.showNotification(`${integrationType} configuration saved successfully`, 'success');
+        async saveIntegration(integrationType) {
+          this.loading.connectionTest = true;
+          try {
+            const form = this.adminData.connectionForms[integrationType];
+            const endpoint = `http://localhost:8001/admin/${integrationType}/save`;
+            
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(form)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+              this.showNotification(data.message, 'success');
+              // Mark as saved in UI
+              this.adminData.savedIntegrations[integrationType] = {
+                host: form.host,
+                username: form.username,
+                saved_at: new Date().toISOString()
+              };
+            } else {
+              this.showNotification(data.detail || 'Failed to save configuration', 'error');
+            }
+          } catch (error) {
+            this.showNotification('Failed to save configuration: ' + error.message, 'error');
+          } finally {
+            this.loading.connectionTest = false;
+          }
+        },
+
+        async loadSavedIntegrations() {
+          try {
+            const response = await fetch('http://localhost:8001/admin/integrations/config');
+            if (response.ok) {
+              const data = await response.json();
+              this.adminData.savedIntegrations = data.integrations || {};
+              
+              // Pre-populate forms with saved data
+              Object.keys(data.integrations || {}).forEach(integrationType => {
+                const saved = data.integrations[integrationType];
+                if (this.adminData.connectionForms[integrationType]) {
+                  this.adminData.connectionForms[integrationType].host = saved.host || this.adminData.connectionForms[integrationType].host;
+                  this.adminData.connectionForms[integrationType].username = saved.username || this.adminData.connectionForms[integrationType].username;
+                  // Don't pre-populate password for security
+                }
+              });
+              
+              console.log('Loaded saved integrations:', data.integrations);
+            }
+          } catch (error) {
+            console.error('Failed to load saved integrations:', error);
+          }
         },
 
         isFormValid(integrationType) {
@@ -1520,6 +1572,9 @@
           
           // Load system information for dynamic OS detection
           await this.loadSystemInfo();
+          
+          // Load saved integration configurations
+          await this.loadSavedIntegrations();
           
           // Load VMs after system info is available
           await this.loadUnderutilizedVMs();

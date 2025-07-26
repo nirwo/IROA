@@ -12,6 +12,8 @@ import psutil
 import platform
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+import json
+import os
 
 router = APIRouter()
 
@@ -124,18 +126,178 @@ async def get_mac_stats():
 
 @router.post("/admin/vcenter/test")
 async def test_vcenter_connection(request: ConnectionTestRequest):
-    # Placeholder for vCenter connection test
-    # In a real implementation, you would test the actual vCenter connection
+    """Test vCenter connection with real authentication"""
     if not request.host or not request.username or not request.password:
         raise HTTPException(status_code=400, detail="Missing required vCenter credentials")
     
-    # Simulate connection test
-    return {
-        "status": "success",
-        "message": f"Successfully connected to vCenter at {request.host}",
+    try:
+        # Try to import vCenter SDK
+        try:
+            from pyVim.connect import SmartConnect, Disconnect
+            from pyVmomi import vim
+            import ssl
+        except ImportError:
+            # If SDK not available, do basic connectivity test
+            import socket
+            import requests
+            
+            # Test basic connectivity
+            host_parts = request.host.split(':')
+            host_ip = host_parts[0]
+            port = int(host_parts[1]) if len(host_parts) > 1 else 443
+            
+            # Test socket connection
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(10)
+            result = sock.connect_ex((host_ip, port))
+            sock.close()
+            
+            if result != 0:
+                raise HTTPException(status_code=400, detail=f"Cannot reach vCenter host {request.host}:{port}")
+            
+            # Test HTTPS endpoint
+            try:
+                response = requests.get(f"https://{request.host}/ui/", 
+                                      timeout=10, 
+                                      verify=False)
+                if response.status_code not in [200, 302, 401, 403]:
+                    raise HTTPException(status_code=400, detail="vCenter web interface not responding")
+            except requests.exceptions.RequestException as e:
+                raise HTTPException(status_code=400, detail=f"vCenter connection failed: {str(e)}")
+            
+            return {
+                "status": "success",
+                "message": f"Successfully connected to vCenter at {request.host} (basic connectivity test)",
+                "host": request.host,
+                "username": request.username,
+                "connection_type": "basic"
+            }
+        
+        # Full vCenter SDK connection test
+        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context.verify_mode = ssl.CERT_NONE
+        
+        # Connect to vCenter
+        si = SmartConnect(
+            host=request.host,
+            user=request.username,
+            pwd=request.password,
+            sslContext=context,
+            port=443
+        )
+        
+        if not si:
+            raise HTTPException(status_code=400, detail="Failed to connect to vCenter")
+        
+        # Get basic info to verify connection
+        content = si.RetrieveContent()
+        datacenter_count = len(content.rootFolder.childEntity)
+        
+        # Disconnect
+        Disconnect(si)
+        
+        return {
+            "status": "success",
+            "message": f"Successfully authenticated to vCenter at {request.host}",
+            "host": request.host,
+            "username": request.username,
+            "datacenter_count": datacenter_count,
+            "connection_type": "full"
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        if "Authentication failure" in error_msg or "Login failure" in error_msg:
+            raise HTTPException(status_code=401, detail="vCenter authentication failed - check username/password")
+        elif "Name or service not known" in error_msg or "No route to host" in error_msg:
+            raise HTTPException(status_code=400, detail=f"Cannot reach vCenter host {request.host}")
+        else:
+            raise HTTPException(status_code=500, detail=f"vCenter connection failed: {error_msg}")
+
+# Configuration persistence
+CONFIG_FILE = "config/integrations.json"
+
+def ensure_config_dir():
+    """Ensure config directory exists"""
+    os.makedirs("config", exist_ok=True)
+
+def load_integration_config():
+    """Load integration configurations from file"""
+    ensure_config_dir()
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_integration_config(config):
+    """Save integration configurations to file"""
+    ensure_config_dir()
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+@router.post("/admin/{integration_type}/save")
+async def save_integration(integration_type: str, request: ConnectionTestRequest):
+    """Save integration configuration"""
+    if integration_type not in ['vcenter', 'zabbix', 'prometheus']:
+        raise HTTPException(status_code=400, detail="Invalid integration type")
+    
+    if not request.host or not request.username:
+        raise HTTPException(status_code=400, detail="Missing required connection information")
+    
+    # Load existing config
+    config = load_integration_config()
+    
+    # Save configuration (without password for security)
+    config[integration_type] = {
         "host": request.host,
-        "username": request.username
+        "username": request.username,
+        "port": getattr(request, 'port', None),
+        "saved_at": datetime.now().isoformat(),
+        "status": "configured"
     }
+    
+    # Save to file
+    if save_integration_config(config):
+        return {
+            "status": "success",
+            "message": f"{integration_type.title()} configuration saved successfully",
+            "integration_type": integration_type
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save configuration")
+
+@router.get("/admin/integrations/config")
+async def get_integration_config():
+    """Get saved integration configurations"""
+    config = load_integration_config()
+    return {
+        "integrations": config,
+        "timestamp": datetime.now().isoformat()
+    }
+
+@router.delete("/admin/{integration_type}/config")
+async def delete_integration_config(integration_type: str):
+    """Delete integration configuration"""
+    if integration_type not in ['vcenter', 'zabbix', 'prometheus']:
+        raise HTTPException(status_code=400, detail="Invalid integration type")
+    
+    config = load_integration_config()
+    if integration_type in config:
+        del config[integration_type]
+        if save_integration_config(config):
+            return {
+                "status": "success",
+                "message": f"{integration_type.title()} configuration deleted"
+            }
+    
+    raise HTTPException(status_code=404, detail="Configuration not found")
 
 @router.post("/admin/zabbix/test")
 async def test_zabbix_connection(request: ConnectionTestRequest):
