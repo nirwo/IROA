@@ -1,6 +1,6 @@
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 # from recommendation.engine import generate_recommendations  # Temporarily disabled for Docker startup
 # from analysis.engine import get_underutilized_vms  # Temporarily disabled for Docker startup
 # from ml.forecast import forecast_cpu  # Temporarily disabled for Docker startup
@@ -92,10 +92,17 @@ class MacMonitoringRequest(BaseModel):
     interval: int = 30
 
 class ConnectionTestRequest(BaseModel):
-    host: str = None
-    username: str = None
-    password: str = None
-    url: str = None
+    host: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    url: Optional[str] = None
+    
+    class Config:
+        # Preserve all characters including special ones
+        str_strip_whitespace = False
+        validate_assignment = True
+        # Allow arbitrary types to prevent encoding issues
+        arbitrary_types_allowed = True
 
 # Admin endpoints
 # Mac monitoring endpoints disabled per user request
@@ -153,8 +160,27 @@ async def get_database_status():
 @router.post("/admin/vcenter/test")
 async def test_vcenter_connection(request: ConnectionTestRequest):
     """Test vCenter connection with real authentication"""
+    # Enhanced credential debugging to identify character deletion issues
+    print(f"🔍 vCenter Credential Debug:")
+    print(f"   Host: '{request.host}' (length: {len(request.host) if request.host else 0})")
+    print(f"   Username: '{request.username}' (length: {len(request.username) if request.username else 0})")
+    print(f"   Password: {'*' * len(request.password) if request.password else 'None'} (length: {len(request.password) if request.password else 0})")
+    
+    # Check for missing credentials
     if not request.host or not request.username or not request.password:
-        raise HTTPException(status_code=400, detail="Missing required vCenter credentials")
+        missing_fields = []
+        if not request.host: missing_fields.append("host")
+        if not request.username: missing_fields.append("username")
+        if not request.password: missing_fields.append("password")
+        raise HTTPException(status_code=400, detail=f"Missing required vCenter credentials: {', '.join(missing_fields)}")
+    
+    # Validate credential lengths to detect truncation
+    if len(request.host.strip()) == 0:
+        raise HTTPException(status_code=400, detail="vCenter host cannot be empty")
+    if len(request.username.strip()) == 0:
+        raise HTTPException(status_code=400, detail="vCenter username cannot be empty")
+    if len(request.password) == 0:
+        raise HTTPException(status_code=400, detail="vCenter password cannot be empty")
     
     try:
         # Try to import vCenter SDK
