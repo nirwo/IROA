@@ -674,3 +674,228 @@ async def get_license_summary():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate license summary: {str(e)}")
+
+
+@router.post("/licenses/check-availability")
+async def check_license_availability(license_type: str, required_count: int = 1):
+    """Check if enough licenses are available for VM creation"""
+    try:
+        # Find matching license by type/name
+        matching_licenses = [
+            l for l in license_storage 
+            if license_type.lower() in l["name"].lower() or license_type.lower() in l["type"].lower()
+            and l["status"] == "active"
+        ]
+        
+        if not matching_licenses:
+            return {
+                "available": False,
+                "message": f"No active licenses found for {license_type}",
+                "available_count": 0,
+                "required_count": required_count
+            }
+        
+        # Check availability in the best matching license
+        best_license = max(matching_licenses, key=lambda x: x["total"] - x["used"])
+        available_count = best_license["total"] - best_license["used"]
+        
+        return {
+            "available": available_count >= required_count,
+            "message": f"{'Sufficient' if available_count >= required_count else 'Insufficient'} licenses available",
+            "available_count": available_count,
+            "required_count": required_count,
+            "license_name": best_license["name"],
+            "license_id": best_license["id"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check license availability: {str(e)}")
+
+
+@router.post("/licenses/allocate")
+async def allocate_license(license_id: int, count: int = 1):
+    """Allocate licenses for VM creation"""
+    try:
+        license_index = next((i for i, l in enumerate(license_storage) if l["id"] == license_id), None)
+        
+        if license_index is None:
+            raise HTTPException(status_code=404, detail="License not found")
+        
+        license_item = license_storage[license_index]
+        available_count = license_item["total"] - license_item["used"]
+        
+        if available_count < count:
+            return {
+                "success": False,
+                "message": f"Insufficient licenses. Available: {available_count}, Required: {count}",
+                "available_count": available_count
+            }
+        
+        # Allocate licenses
+        license_storage[license_index]["used"] += count
+        
+        return {
+            "success": True,
+            "message": f"Successfully allocated {count} license(s)",
+            "allocated_count": count,
+            "remaining_count": license_item["total"] - license_storage[license_index]["used"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to allocate license: {str(e)}")
+
+
+# VM Profile Management
+class VMProfile(BaseModel):
+    id: int
+    name: str
+    cpu_cores: int
+    memory_gb: int
+    disk_gb: int
+    description: str = ""
+    license_type: str = ""
+
+# VM Profile storage with common profiles
+vm_profiles = [
+    {
+        "id": 1,
+        "name": "Small Development",
+        "cpu_cores": 2,
+        "memory_gb": 4,
+        "disk_gb": 50,
+        "description": "Basic development environment",
+        "license_type": "Windows Server",
+        "current_count": 3
+    },
+    {
+        "id": 2,
+        "name": "Medium Production",
+        "cpu_cores": 4,
+        "memory_gb": 8,
+        "disk_gb": 100,
+        "description": "Standard production workload",
+        "license_type": "VMware vSphere",
+        "current_count": 2
+    },
+    {
+        "id": 3,
+        "name": "Large Database",
+        "cpu_cores": 8,
+        "memory_gb": 16,
+        "disk_gb": 500,
+        "description": "High-performance database server",
+        "license_type": "Red Hat Enterprise Linux",
+        "current_count": 1
+    },
+    {
+        "id": 4,
+        "name": "Micro Service",
+        "cpu_cores": 1,
+        "memory_gb": 2,
+        "disk_gb": 25,
+        "description": "Lightweight microservice container",
+        "license_type": "Prometheus",
+        "current_count": 5
+    },
+    {
+        "id": 5,
+        "name": "Enterprise Application",
+        "cpu_cores": 6,
+        "memory_gb": 12,
+        "disk_gb": 200,
+        "description": "Enterprise application server",
+        "license_type": "VMware vSphere",
+        "current_count": 1
+    }
+]
+
+
+@router.get("/profiles")
+async def get_vm_profiles():
+    """Get all VM profiles with current counts"""
+    try:
+        return {
+            "profiles": vm_profiles,
+            "total_profiles": len(vm_profiles),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get VM profiles: {str(e)}")
+
+
+@router.get("/profiles/preview")
+async def get_profile_preview():
+    """Get profile preview with capacity analysis using 80% rule"""
+    try:
+        # Get system resources
+        cpu_count = psutil.cpu_count()
+        memory_total = psutil.virtual_memory().total / (1024**3)  # GB
+        
+        # Calculate current resource usage from all profiles
+        total_cpu_used = sum([p["cpu_cores"] * p["current_count"] for p in vm_profiles])
+        total_memory_used = sum([p["memory_gb"] * p["current_count"] for p in vm_profiles])
+        
+        # Apply 80% capacity rule
+        max_cpu_capacity = int(cpu_count * 0.8)
+        max_memory_capacity = int(memory_total * 0.8)
+        
+        # Calculate remaining capacity
+        remaining_cpu = max_cpu_capacity - total_cpu_used
+        remaining_memory = max_memory_capacity - total_memory_used
+        
+        # Calculate how many more VMs can be created per profile
+        profile_analysis = []
+        for profile in vm_profiles:
+            # Check license availability
+            license_check = await check_license_availability(profile["license_type"], 1)
+            
+            # Calculate max additional VMs based on resources
+            max_by_cpu = remaining_cpu // profile["cpu_cores"] if profile["cpu_cores"] > 0 else 0
+            max_by_memory = remaining_memory // profile["memory_gb"] if profile["memory_gb"] > 0 else 0
+            max_by_license = license_check["available_count"] if license_check["available"] else 0
+            
+            # The limiting factor determines max additional VMs
+            max_additional = min(max_by_cpu, max_by_memory, max_by_license)
+            
+            # Calculate resource utilization for this profile
+            profile_cpu_usage = (profile["cpu_cores"] * profile["current_count"]) / max_cpu_capacity * 100
+            profile_memory_usage = (profile["memory_gb"] * profile["current_count"]) / max_memory_capacity * 100
+            
+            profile_analysis.append({
+                "profile_id": profile["id"],
+                "profile_name": profile["name"],
+                "current_count": profile["current_count"],
+                "max_additional": max(0, max_additional),
+                "max_total_possible": profile["current_count"] + max(0, max_additional),
+                "cpu_per_vm": profile["cpu_cores"],
+                "memory_per_vm": profile["memory_gb"],
+                "disk_per_vm": profile["disk_gb"],
+                "license_type": profile["license_type"],
+                "license_available": license_check["available"],
+                "license_count_available": license_check["available_count"],
+                "limiting_factor": "CPU" if max_by_cpu <= max_by_memory and max_by_cpu <= max_by_license else "Memory" if max_by_memory <= max_by_license else "License",
+                "profile_cpu_usage_percent": round(profile_cpu_usage, 1),
+                "profile_memory_usage_percent": round(profile_memory_usage, 1)
+            })
+        
+        return {
+            "system_capacity": {
+                "total_cpu_cores": cpu_count,
+                "total_memory_gb": round(memory_total, 1),
+                "max_cpu_capacity_80_percent": max_cpu_capacity,
+                "max_memory_capacity_80_percent": max_memory_capacity,
+                "current_cpu_used": total_cpu_used,
+                "current_memory_used": total_memory_used,
+                "remaining_cpu": remaining_cpu,
+                "remaining_memory": remaining_memory,
+                "cpu_utilization_percent": round((total_cpu_used / max_cpu_capacity) * 100, 1),
+                "memory_utilization_percent": round((total_memory_used / max_memory_capacity) * 100, 1)
+            },
+            "profile_analysis": profile_analysis,
+            "total_current_vms": sum([p["current_count"] for p in vm_profiles]),
+            "total_max_additional_vms": sum([p["max_additional"] for p in profile_analysis]),
+            "analysis_timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate profile preview: {str(e)}")

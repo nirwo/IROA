@@ -360,6 +360,150 @@
           </div>
         </div>
 
+        <!-- Profile Preview Tab -->
+        <div v-if="activeTab === 'profiles'" class="tab-content">
+          <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">Profile Preview</h2>
+            <p class="text-gray-600">View VM profiles and capacity planning with 80% utilization rule</p>
+          </div>
+
+          <div class="mb-6">
+            <button @click="loadProfilePreview" :disabled="loading.profiles" 
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+              <div v-if="loading.profiles" class="loading-spinner mr-2"></div>
+              <i v-else data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+              {{ loading.profiles ? 'Loading...' : 'Refresh Profile Data' }}
+            </button>
+          </div>
+
+          <!-- System Capacity Overview -->
+          <div v-if="profilePreview.system_capacity" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <i data-lucide="server" class="w-5 h-5 mr-2 text-blue-500"></i>
+              System Capacity (80% Rule)
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ profilePreview.system_capacity.total_cpu_cores }}</div>
+                <div class="text-sm text-gray-500">Total CPU Cores</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-green-600">{{ profilePreview.system_capacity.total_memory_gb }}GB</div>
+                <div class="text-sm text-gray-500">Total Memory</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-orange-600">{{ profilePreview.system_capacity.cpu_utilization_percent }}%</div>
+                <div class="text-sm text-gray-500">CPU Utilization</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-red-600">{{ profilePreview.system_capacity.memory_utilization_percent }}%</div>
+                <div class="text-sm text-gray-500">Memory Utilization</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Profile Analysis -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div v-for="profile in profilePreview.profile_analysis" :key="profile.profile_id" 
+                 class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-start justify-between mb-4">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900">{{ profile.profile_name }}</h3>
+                  <p class="text-sm text-gray-500">{{ profile.cpu_per_vm }}CPU / {{ profile.memory_per_vm }}GB RAM</p>
+                </div>
+                <div class="text-right">
+                  <div class="text-2xl font-bold text-blue-600">{{ profile.current_count }}</div>
+                  <div class="text-xs text-gray-500">Current</div>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <!-- Resource Usage -->
+                <div>
+                  <div class="flex justify-between text-sm mb-1">
+                    <span>CPU Usage</span>
+                    <span>{{ profile.profile_cpu_usage_percent }}%</span>
+                  </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-500 h-2 rounded-full" :style="{width: profile.profile_cpu_usage_percent + '%'}"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-sm mb-1">
+                    <span>Memory Usage</span>
+                    <span>{{ profile.profile_memory_usage_percent }}%</span>
+                  </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-green-500 h-2 rounded-full" :style="{width: profile.profile_memory_usage_percent + '%'}"></div>
+                  </div>
+                </div>
+
+                <!-- License Status -->
+                <div class="flex items-center justify-between py-2 px-3 rounded-lg" 
+                     :class="profile.license_available ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
+                  <span class="text-sm font-medium">{{ profile.license_type }}</span>
+                  <div class="flex items-center">
+                    <i :data-lucide="profile.license_available ? 'check-circle' : 'x-circle'" class="w-4 h-4 mr-1"></i>
+                    <span class="text-xs">{{ profile.license_count_available }} available</span>
+                  </div>
+                </div>
+
+                <!-- Capacity Planning -->
+                <div class="border-t pt-3">
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium text-gray-700">Max Additional VMs</span>
+                    <span class="text-lg font-bold text-green-600">+{{ profile.max_additional }}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-500">Total Possible</span>
+                    <span class="text-sm font-semibold">{{ profile.max_total_possible }}</span>
+                  </div>
+                  <div class="mt-2">
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                          :class="{
+                            'bg-red-100 text-red-800': profile.limiting_factor === 'License',
+                            'bg-orange-100 text-orange-800': profile.limiting_factor === 'CPU',
+                            'bg-yellow-100 text-yellow-800': profile.limiting_factor === 'Memory'
+                          }">
+                      Limited by: {{ profile.limiting_factor }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Summary Statistics -->
+          <div v-if="profilePreview.total_current_vms" class="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <i data-lucide="bar-chart-3" class="w-5 h-5 mr-2 text-blue-500"></i>
+              Capacity Summary
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="text-center">
+                <div class="text-3xl font-bold text-blue-600">{{ profilePreview.total_current_vms }}</div>
+                <div class="text-sm text-gray-600">Current VMs</div>
+              </div>
+              <div class="text-center">
+                <div class="text-3xl font-bold text-green-600">+{{ profilePreview.total_max_additional_vms }}</div>
+                <div class="text-sm text-gray-600">Additional Possible</div>
+              </div>
+              <div class="text-center">
+                <div class="text-3xl font-bold text-purple-600">{{ profilePreview.total_current_vms + profilePreview.total_max_additional_vms }}</div>
+                <div class="text-sm text-gray-600">Total Capacity</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-if="!profilePreview.profile_analysis || profilePreview.profile_analysis.length === 0" class="text-center py-12">
+            <i data-lucide="layers" class="w-16 h-16 text-gray-300 mx-auto mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No profile data available</h3>
+            <p class="text-gray-600 mb-6">Click "Refresh Profile Data" to load VM profiles and capacity analysis.</p>
+          </div>
+        </div>
+
         <!-- Administration Tab -->
         <div v-if="activeTab === 'admin'" class="tab-content">
           <div class="mb-8">
@@ -793,6 +937,12 @@
             recommendations: []
           },
           licenses: [],
+          profilePreview: {
+            system_capacity: null,
+            profile_analysis: [],
+            total_current_vms: 0,
+            total_max_additional_vms: 0
+          },
           loading: {
             recommendations: false,
             vms: false,
@@ -800,16 +950,18 @@
             anomalies: false,
             connectionTest: false,
             capacity: false,
-            licenses: false
+            licenses: false,
+            profiles: false
           },
           tabs: [
-            { id: 'overview', name: 'Overview', icon: 'layout-dashboard' },
+            { id: 'overview', name: 'Overview', icon: 'layout-grid' },
             { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
             { id: 'vms', name: 'Virtual Machines', icon: 'server' },
             { id: 'analytics', name: 'Analytics', icon: 'bar-chart-3' },
-            { id: 'capacity', name: 'Capacity Planner', icon: 'cpu' },
+            { id: 'capacity', name: 'Capacity Planner', icon: 'gauge' },
+            { id: 'profiles', name: 'Profile Preview', icon: 'layers' },
             { id: 'licenses', name: 'License Management', icon: 'key' },
-            { id: 'admin', name: 'Administration', icon: 'settings' }
+            { id: 'administration', name: 'Administration', icon: 'settings' }
           ],
           stats: [
             { title: 'Total VMs', value: '0', change: 0, icon: 'server', bgColor: 'bg-blue-500' },
@@ -1170,6 +1322,92 @@
             this.showNotification('Using sample license data', 'info');
           } finally {
             this.loading.licenses = false;
+          }
+        },
+
+        async loadProfilePreview() {
+          this.loading.profiles = true;
+          try {
+            const response = await fetch('http://localhost:8001/profiles/preview');
+            if (response.ok) {
+              const data = await response.json();
+              this.profilePreview = data;
+              this.showNotification('Profile preview loaded successfully', 'success');
+            } else {
+              throw new Error('Failed to load profile preview');
+            }
+          } catch (error) {
+            console.error('Error loading profile preview:', error);
+            // Fallback to sample data
+            this.profilePreview = {
+              system_capacity: {
+                total_cpu_cores: 11,
+                total_memory_gb: 18.0,
+                max_cpu_capacity_80_percent: 8,
+                max_memory_capacity_80_percent: 14,
+                current_cpu_used: 22,
+                current_memory_used: 42,
+                remaining_cpu: -14,
+                remaining_memory: -28,
+                cpu_utilization_percent: 275.0,
+                memory_utilization_percent: 300.0
+              },
+              profile_analysis: [
+                {
+                  profile_id: 1,
+                  profile_name: 'Small Development',
+                  current_count: 3,
+                  max_additional: 0,
+                  max_total_possible: 3,
+                  cpu_per_vm: 2,
+                  memory_per_vm: 4,
+                  disk_per_vm: 50,
+                  license_type: 'Windows Server',
+                  license_available: true,
+                  license_count_available: 8,
+                  limiting_factor: 'Memory',
+                  profile_cpu_usage_percent: 75.0,
+                  profile_memory_usage_percent: 85.7
+                },
+                {
+                  profile_id: 2,
+                  profile_name: 'Medium Production',
+                  current_count: 2,
+                  max_additional: 0,
+                  max_total_possible: 2,
+                  cpu_per_vm: 4,
+                  memory_per_vm: 8,
+                  disk_per_vm: 100,
+                  license_type: 'VMware vSphere',
+                  license_available: true,
+                  license_count_available: 3,
+                  limiting_factor: 'CPU',
+                  profile_cpu_usage_percent: 100.0,
+                  profile_memory_usage_percent: 114.3
+                },
+                {
+                  profile_id: 4,
+                  profile_name: 'Micro Service',
+                  current_count: 5,
+                  max_additional: 0,
+                  max_total_possible: 5,
+                  cpu_per_vm: 1,
+                  memory_per_vm: 2,
+                  disk_per_vm: 25,
+                  license_type: 'Prometheus',
+                  license_available: true,
+                  license_count_available: 7,
+                  limiting_factor: 'Memory',
+                  profile_cpu_usage_percent: 62.5,
+                  profile_memory_usage_percent: 71.4
+                }
+              ],
+              total_current_vms: 12,
+              total_max_additional_vms: 0
+            };
+            this.showNotification('Using sample profile data', 'info');
+          } finally {
+            this.loading.profiles = false;
           }
         },
 
