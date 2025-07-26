@@ -994,7 +994,7 @@ async def get_all_vms():
 
 @router.get("/analytics/prometheus")
 async def get_prometheus_analytics():
-    """Get Mac analytics data from Prometheus"""
+    """Get comprehensive analytics data from all VMs including vCenter and Mac system"""
     import requests
     
     try:
@@ -1033,10 +1033,27 @@ async def get_prometheus_analytics():
                 memory_values = memory_result['data']['result'][0]['values']
                 memory_data = [float(value[1]) for value in memory_values[-12:]]  # Last 12 points
         
+        # Include vCenter VM analytics data
+        vcenter_vm_analytics = []
+        for vm in vcenter_vms_cache:
+            vcenter_vm_analytics.append({
+                "vm_name": vm.get('vm', 'Unknown'),
+                "cpu_usage": vm.get('cpu', 0),
+                "memory_usage": vm.get('memory_usage', 0),
+                "status": vm.get('status', 'unknown'),
+                "cluster": vm.get('cluster', 'Unknown'),
+                "datacenter": vm.get('datacenter', 'Unknown'),
+                "source": "vcenter"
+            })
+        
+        print(f"📊 Analytics: Including {len(vcenter_vm_analytics)} vCenter VMs in analytics data")
+        
         return {
             "cpu_history": cpu_data,
             "memory_history": memory_data,
-            "source": "prometheus",
+            "vcenter_vms": vcenter_vm_analytics,
+            "total_vms": len(vcenter_vms_cache) + 1,  # vCenter VMs + Mac system
+            "source": "prometheus_and_vcenter",
             "timeframe": "last_4_hours"
         }
         
@@ -1065,8 +1082,9 @@ async def get_capacity_analysis():
         max_vms_by_memory = int((memory_total * 0.8) / vm_memory_requirement)
         max_vms = min(max_vms_by_cpu, max_vms_by_memory)
         
-        # Current VMs (simplified - in real scenario would query hypervisor)
-        current_vms = 1  # Mac system VM
+        # Count all VMs from vCenter cache and other sources
+        current_vms = len(vcenter_vms_cache) + 1  # vCenter VMs + Mac system VM
+        print(f"📊 Capacity analysis: Found {len(vcenter_vms_cache)} vCenter VMs + 1 system VM = {current_vms} total VMs")
         
         # Generate recommendations
         recommendations = []
@@ -1507,9 +1525,32 @@ async def get_profile_preview():
         cpu_count = psutil.cpu_count()
         memory_total = psutil.virtual_memory().total / (1024**3)  # GB
         
-        # Calculate current resource usage from all profiles
-        total_cpu_used = sum([p["cpu_cores"] * p["current_count"] for p in vm_profiles])
-        total_memory_used = sum([p["memory_gb"] * p["current_count"] for p in vm_profiles])
+        # Count actual VMs from vCenter cache and categorize by profile types
+        actual_vms = vcenter_vms_cache + [{
+            "vm": "localhost",
+            "cores": cpu_count,
+            "memory": memory_total,
+            "source": "system"
+        }]
+        
+        print(f"📊 Profile Preview: Analyzing {len(actual_vms)} actual VMs ({len(vcenter_vms_cache)} from vCenter + 1 system)")
+        
+        # Update vm_profiles with actual VM counts
+        for profile in vm_profiles:
+            # Count VMs that match this profile's resource requirements
+            matching_vms = 0
+            for vm in actual_vms:
+                vm_cores = vm.get('cores', 0)
+                vm_memory = vm.get('memory', 0)
+                # Match VMs to profiles based on resource requirements (with some tolerance)
+                if (abs(vm_cores - profile["cpu_cores"]) <= 1 and 
+                    abs(vm_memory - profile["memory_gb"]) <= 2):
+                    matching_vms += 1
+            profile["current_count"] = matching_vms
+        
+        # Calculate current resource usage from actual VMs
+        total_cpu_used = sum([vm.get('cores', 0) for vm in actual_vms])
+        total_memory_used = sum([vm.get('memory', 0) for vm in actual_vms])
         
         # Apply 80% capacity rule
         max_cpu_capacity = int(cpu_count * 0.8)

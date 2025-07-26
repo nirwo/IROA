@@ -270,38 +270,46 @@
               </button>
             </div>
             
-            <div v-if="infrastructure.summary" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-              <div class="text-center">
-                <div class="text-2xl font-bold text-blue-600">{{ infrastructure.summary.total_datacenters }}</div>
-                <div class="text-sm text-gray-500">Datacenters</div>
+            <div v-if="infrastructure.summary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 text-center border border-blue-200">
+                <div class="text-3xl font-bold text-blue-600 mb-2">{{ infrastructure.summary.total_datacenters }}</div>
+                <div class="text-sm font-medium text-blue-700">Datacenters</div>
+                <div class="text-xs text-blue-600 mt-1">Physical locations</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-green-600">{{ infrastructure.summary.total_clusters }}</div>
-                <div class="text-sm text-gray-500">Clusters</div>
+              <div class="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 text-center border border-green-200">
+                <div class="text-3xl font-bold text-green-600 mb-2">{{ infrastructure.summary.total_clusters }}</div>
+                <div class="text-sm font-medium text-green-700">Clusters</div>
+                <div class="text-xs text-green-600 mt-1">Compute clusters</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-purple-600">{{ infrastructure.summary.total_hosts }}</div>
-                <div class="text-sm text-gray-500">Hosts</div>
+              <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-6 text-center border border-purple-200">
+                <div class="text-3xl font-bold text-purple-600 mb-2">{{ infrastructure.summary.total_hosts }}</div>
+                <div class="text-sm font-medium text-purple-700">ESXi Hosts</div>
+                <div class="text-xs text-purple-600 mt-1">Physical servers</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-orange-600">{{ infrastructure.summary.total_datastores }}</div>
-                <div class="text-sm text-gray-500">Datastores</div>
+              <div class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg p-6 text-center border border-orange-200">
+                <div class="text-3xl font-bold text-orange-600 mb-2">{{ infrastructure.summary.total_datastores }}</div>
+                <div class="text-sm font-medium text-orange-700">Datastores</div>
+                <div class="text-xs text-orange-600 mt-1">Storage systems</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-red-600">{{ infrastructure.summary.total_vms }}</div>
-                <div class="text-sm text-gray-500">Total VMs</div>
+              <div class="bg-gradient-to-r from-red-50 to-red-100 rounded-lg p-6 text-center border border-red-200">
+                <div class="text-3xl font-bold text-red-600 mb-2">{{ infrastructure.summary.total_vms }}</div>
+                <div class="text-sm font-medium text-red-700">Total VMs</div>
+                <div class="text-xs text-red-600 mt-1">{{ infrastructure.summary.running_vms }} running</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-teal-600">{{ infrastructure.summary.running_vms }}</div>
-                <div class="text-sm text-gray-500">Running VMs</div>
+              <div class="bg-gradient-to-r from-teal-50 to-teal-100 rounded-lg p-6 text-center border border-teal-200">
+                <div class="text-3xl font-bold text-teal-600 mb-2">{{ infrastructure.summary.running_vms }}</div>
+                <div class="text-sm font-medium text-teal-700">Running VMs</div>
+                <div class="text-xs text-teal-600 mt-1">Active workloads</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-indigo-600">{{ infrastructure.summary.total_cpu_cores }}</div>
-                <div class="text-sm text-gray-500">CPU Cores</div>
+              <div class="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-lg p-6 text-center border border-indigo-200">
+                <div class="text-3xl font-bold text-indigo-600 mb-2">{{ infrastructure.summary.total_cpu_cores }}</div>
+                <div class="text-sm font-medium text-indigo-700">CPU Cores</div>
+                <div class="text-xs text-indigo-600 mt-1">Total compute</div>
               </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-pink-600">{{ Math.round(infrastructure.summary.total_memory_gb) }}GB</div>
-                <div class="text-sm text-gray-500">Total Memory</div>
+              <div class="bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg p-6 text-center border border-pink-200">
+                <div class="text-3xl font-bold text-pink-600 mb-2">{{ Math.round(infrastructure.summary.total_memory_gb) }}GB</div>
+                <div class="text-sm font-medium text-pink-700">Total Memory</div>
+                <div class="text-xs text-pink-600 mt-1">RAM capacity</div>
               </div>
             </div>
             
@@ -1431,8 +1439,13 @@
         // Run network diagnostics for debugging
         await this.runNetworkDiagnostics();
         
-        // Check API connection
-        await this.checkApiConnection();
+        // Check API connection with error handling
+        try {
+          await this.checkApiConnection();
+        } catch (error) {
+          console.error('❌ API connection check failed:', error);
+          this.apiConnected = false;
+        }
         
         // Load initial data
         await this.loadSystemInfo();
