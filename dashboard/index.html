@@ -832,12 +832,17 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="vm in filteredVMs" :key="vm.vm" class="vm-card bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <!-- VM Cards with Enhanced Error Handling -->
+          <div v-if="filteredVMs && filteredVMs.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="(vm, index) in filteredVMs" :key="`vm-${index}-${vm.vm || 'unknown'}`" class="vm-card bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">{{ vm.vm }}</h3>
-                <div class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
-                  Underutilized
+                <h3 class="text-lg font-semibold text-gray-900">{{ vm.vm || 'Unknown VM' }}</h3>
+                <div :class="{
+                  'bg-red-100 text-red-800': (vm.cpu || 0) < 30 && (vm.memory_usage || 0) < 50,
+                  'bg-yellow-100 text-yellow-800': (vm.cpu || 0) >= 30 && (vm.cpu || 0) < 70,
+                  'bg-green-100 text-green-800': (vm.cpu || 0) >= 70
+                }" class="px-2 py-1 rounded-full text-xs font-medium">
+                  {{ getVMStatus(vm) }}
                 </div>
               </div>
               <div class="space-y-3">
@@ -845,25 +850,58 @@
                   <span class="text-sm text-gray-600">CPU Usage</span>
                   <div class="flex items-center">
                     <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
-                      <div class="bg-blue-500 h-2 rounded-full" :style="{width: vm.details?.avg_cpu + '%'}"></div>
+                      <div class="bg-blue-500 h-2 rounded-full" :style="{width: Math.min(100, Math.max(0, getCPUValue(vm))) + '%'}"></div>
                     </div>
-                    <span class="text-sm font-medium">{{ vm.details?.avg_cpu }}%</span>
+                    <span class="text-sm font-medium">{{ getCPUValue(vm).toFixed(1) }}%</span>
                   </div>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-sm text-gray-600">Memory Usage</span>
                   <div class="flex items-center">
                     <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
-                      <div class="bg-green-500 h-2 rounded-full" :style="{width: vm.details?.avg_mem + '%'}"></div>
+                      <div class="bg-green-500 h-2 rounded-full" :style="{width: Math.min(100, Math.max(0, getMemoryValue(vm))) + '%'}"></div>
                     </div>
-                    <span class="text-sm font-medium">{{ vm.details?.avg_mem }}%</span>
+                    <span class="text-sm font-medium">{{ getMemoryValue(vm).toFixed(1) }}%</span>
+                  </div>
+                </div>
+                <div v-if="vm.details?.disk_usage" class="flex justify-between items-center">
+                  <span class="text-sm text-gray-600">Disk Usage</span>
+                  <div class="flex items-center">
+                    <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
+                      <div class="bg-purple-500 h-2 rounded-full" :style="{width: Math.min(100, Math.max(0, vm.details.disk_usage || 0)) + '%'}"></div>
+                    </div>
+                    <span class="text-sm font-medium">{{ (vm.details.disk_usage || 0).toFixed(1) }}%</span>
                   </div>
                 </div>
               </div>
               <div class="mt-4 pt-4 border-t border-gray-100">
-                <p class="text-sm text-gray-600">{{ vm.suggestion }}</p>
+                <div class="text-sm space-y-1">
+                  <div class="flex justify-between">
+                    <span class="text-gray-600">Status:</span>
+                    <span class="font-medium">{{ vm.status || 'Unknown' }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-600">Cores:</span>
+                    <span class="font-medium">{{ vm.cores || 'N/A' }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-600">Memory:</span>
+                    <span class="font-medium">{{ vm.memory || 'N/A' }}GB</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-600">Source:</span>
+                    <span class="font-medium capitalize">{{ vm.source || 'Unknown' }}</span>
+                  </div>
+                </div>
+                <p v-if="vm.suggestion" class="text-sm text-gray-600 mt-2 pt-2 border-t border-gray-100">{{ vm.suggestion }}</p>
               </div>
             </div>
+          </div>
+          
+          <!-- Loading State -->
+          <div v-else-if="loading.vms" class="flex items-center justify-center py-12">
+            <div class="loading-spinner mr-3"></div>
+            <span class="text-gray-600">Loading virtual machines...</span>
           </div>
         </div>
 
@@ -1133,24 +1171,97 @@
 
         // VM methods
         async loadUnderutilizedVMs() {
+          console.log('🔄 Loading VMs from API...');
           this.loading.vms = true;
           try {
             const response = await fetch(`${this.apiBaseUrl}/vms`);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
             const data = await response.json();
-            this.underutilizedVMs = data;
+            
+            // Validate and sanitize VM data to prevent rendering errors
+            const sanitizedVMs = this.sanitizeVMData(data);
+            this.underutilizedVMs = sanitizedVMs;
+            
+            console.log(`✅ Loaded ${sanitizedVMs.length} VMs:`, sanitizedVMs);
             
             // Update stats based on real data
-            this.updateStatsFromVMs(data);
+            this.updateStatsFromVMs(sanitizedVMs);
             
-            const systemVM = data.find(vm => vm.source === 'prometheus');
+            const systemVM = sanitizedVMs.find(vm => vm.source === 'prometheus');
             const message = systemVM ? 
-              `Found ${data.length} VMs (including ${systemVM.vm} from Prometheus)` : 
-              `Found ${data.length} VMs`;
+              `Found ${sanitizedVMs.length} VMs (including ${systemVM.vm} from Prometheus)` : 
+              `Found ${sanitizedVMs.length} VMs`;
             this.showNotification(message, 'success');
           } catch (error) {
+            console.error('❌ Failed to load VMs:', error);
             this.showNotification('Failed to load VMs: ' + error.message, 'error');
+            // Set fallback data to prevent rendering errors
+            this.underutilizedVMs = [];
           } finally {
             this.loading.vms = false;
+          }
+        },
+
+        // Sanitize VM data to prevent Vue.js rendering errors
+        sanitizeVMData(vms) {
+          if (!Array.isArray(vms)) {
+            console.warn('⚠️ VM data is not an array, converting:', vms);
+            return [];
+          }
+          
+          return vms.map((vm, index) => {
+            // Ensure all required fields exist with safe defaults
+            const sanitized = {
+              vm: vm.vm || `VM-${index + 1}`,
+              status: vm.status || 'unknown',
+              cpu: this.safeNumber(vm.cpu, 0),
+              memory_usage: this.safeNumber(vm.memory_usage, 0),
+              cores: this.safeNumber(vm.cores, 0),
+              memory: this.safeNumber(vm.memory, 0),
+              cluster: vm.cluster || 'unknown',
+              source: vm.source || 'unknown',
+              suggestion: vm.suggestion || '',
+              details: {
+                avg_cpu: this.safeNumber(vm.details?.avg_cpu, vm.cpu || 0),
+                avg_mem: this.safeNumber(vm.details?.avg_mem, vm.memory_usage || 0),
+                disk_usage: this.safeNumber(vm.details?.disk_usage, 0)
+              }
+            };
+            
+            console.log(`🔧 Sanitized VM ${index + 1}:`, sanitized);
+            return sanitized;
+          });
+        },
+
+        // Helper method to safely convert values to numbers
+        safeNumber(value, defaultValue = 0) {
+          const num = parseFloat(value);
+          return isNaN(num) ? defaultValue : num;
+        },
+
+        // Get CPU value with fallback
+        getCPUValue(vm) {
+          return this.safeNumber(vm.details?.avg_cpu || vm.cpu, 0);
+        },
+
+        // Get Memory value with fallback
+        getMemoryValue(vm) {
+          return this.safeNumber(vm.details?.avg_mem || vm.memory_usage, 0);
+        },
+
+        // Get VM status based on utilization
+        getVMStatus(vm) {
+          const cpu = this.getCPUValue(vm);
+          const memory = this.getMemoryValue(vm);
+          
+          if (cpu < 30 && memory < 50) {
+            return 'Underutilized';
+          } else if (cpu >= 70 || memory >= 80) {
+            return 'High Usage';
+          } else {
+            return 'Normal';
           }
         },
 
