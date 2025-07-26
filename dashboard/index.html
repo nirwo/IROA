@@ -160,6 +160,206 @@
           </div>
         </div>
 
+        <!-- Capacity Planner Tab -->
+        <div v-if="activeTab === 'capacity'" class="tab-content">
+          <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">Capacity Planner</h2>
+            <p class="text-gray-600">Analyze infrastructure capacity and plan for future growth</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Current Capacity Overview -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i data-lucide="cpu" class="w-5 h-5 mr-2 text-blue-500"></i>
+                Current Infrastructure
+              </h3>
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Total CPU Cores</span>
+                  <span class="font-semibold">{{ capacityData.totalCPU }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Total Memory (GB)</span>
+                  <span class="font-semibold">{{ capacityData.totalMemory }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Current VMs</span>
+                  <span class="font-semibold">{{ capacityData.currentVMs }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">CPU Utilization</span>
+                  <span class="font-semibold text-orange-600">{{ Math.round(capacityData.usedCPU) }}%</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Memory Utilization</span>
+                  <span class="font-semibold text-orange-600">{{ Math.round(capacityData.usedMemory) }}%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Capacity Recommendations -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i data-lucide="trending-up" class="w-5 h-5 mr-2 text-green-500"></i>
+                Capacity Analysis
+              </h3>
+              <div class="space-y-4">
+                <div class="bg-green-50 p-4 rounded-lg">
+                  <div class="flex items-center mb-2">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-600 mr-2"></i>
+                    <span class="font-semibold text-green-800">Additional VMs Possible</span>
+                  </div>
+                  <p class="text-2xl font-bold text-green-600">{{ capacityData.maxVMs - capacityData.currentVMs }}</p>
+                  <p class="text-sm text-green-700 mt-1">Based on current utilization patterns</p>
+                </div>
+                <div class="space-y-2">
+                  <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Recommended VM Size</span>
+                    <span class="font-medium">2 CPU / 4GB RAM</span>
+                  </div>
+                  <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Safety Buffer</span>
+                    <span class="font-medium">20%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Capacity Planning Actions -->
+          <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Capacity Planning Tools</h3>
+            <div class="flex flex-wrap gap-4">
+              <button 
+                @click="loadCapacityData" 
+                :disabled="loading.capacity"
+                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center"
+              >
+                <i data-lucide="refresh-cw" class="w-4 h-4 mr-2" :class="{'animate-spin': loading.capacity}"></i>
+                {{ loading.capacity ? 'Analyzing...' : 'Refresh Analysis' }}
+              </button>
+              <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+                <i data-lucide="download" class="w-4 h-4 mr-2"></i>
+                Export Report
+              </button>
+            </div>
+          </div>
+
+          <!-- Capacity Recommendations List -->
+          <div v-if="capacityData.recommendations.length > 0" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mt-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Optimization Recommendations</h3>
+            <div class="space-y-3">
+              <div v-for="rec in capacityData.recommendations" :key="rec.id" class="flex items-start p-3 bg-blue-50 rounded-lg">
+                <i data-lucide="lightbulb" class="w-5 h-5 text-blue-500 mr-3 mt-0.5"></i>
+                <div>
+                  <p class="font-medium text-blue-900">{{ rec.title }}</p>
+                  <p class="text-sm text-blue-700 mt-1">{{ rec.description }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- License Management Tab -->
+        <div v-if="activeTab === 'licenses'" class="tab-content">
+          <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">License Management</h2>
+            <p class="text-gray-600">Manage and track software licenses across your infrastructure</p>
+          </div>
+
+          <!-- License Actions -->
+          <div class="flex justify-between items-center mb-6">
+            <div class="flex gap-4">
+              <button 
+                @click="loadLicenses" 
+                :disabled="loading.licenses"
+                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center"
+              >
+                <i data-lucide="refresh-cw" class="w-4 h-4 mr-2" :class="{'animate-spin': loading.licenses}"></i>
+                {{ loading.licenses ? 'Loading...' : 'Refresh Licenses' }}
+              </button>
+              <button class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+                <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+                Add License
+              </button>
+            </div>
+            <div class="flex items-center space-x-4">
+              <input 
+                type="text" 
+                placeholder="Search licenses..." 
+                class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+            </div>
+          </div>
+
+          <!-- License Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" v-if="licenses.length > 0">
+            <div v-for="license in licenses" :key="license.id" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center">
+                  <i data-lucide="key" class="w-6 h-6 text-blue-500 mr-3"></i>
+                  <div>
+                    <h3 class="font-semibold text-gray-900">{{ license.name }}</h3>
+                    <p class="text-sm text-gray-600">{{ license.vendor }}</p>
+                  </div>
+                </div>
+                <span :class="{
+                  'bg-green-100 text-green-800': license.status === 'active',
+                  'bg-yellow-100 text-yellow-800': license.status === 'expiring',
+                  'bg-red-100 text-red-800': license.status === 'expired'
+                }" class="px-2 py-1 rounded-full text-xs font-medium">
+                  {{ license.status }}
+                </span>
+              </div>
+              
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-gray-600">Type:</span>
+                  <span class="font-medium">{{ license.type }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-600">Used/Total:</span>
+                  <span class="font-medium">{{ license.used }}/{{ license.total }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-600">Expires:</span>
+                  <span class="font-medium">{{ license.expiryDate }}</span>
+                </div>
+              </div>
+              
+              <div class="mt-4 pt-4 border-t border-gray-100">
+                <div class="flex justify-between items-center">
+                  <div class="w-full bg-gray-200 rounded-full h-2 mr-3">
+                    <div class="bg-blue-500 h-2 rounded-full" :style="{width: (license.used/license.total*100) + '%'}"></div>
+                  </div>
+                  <span class="text-xs text-gray-600 whitespace-nowrap">{{ Math.round(license.used/license.total*100) }}%</span>
+                </div>
+              </div>
+              
+              <div class="mt-4 flex gap-2">
+                <button class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm font-medium transition-colors">
+                  Edit
+                </button>
+                <button class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded text-sm font-medium transition-colors">
+                  Details
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-if="licenses.length === 0 && !loading.licenses" class="text-center py-12">
+            <i data-lucide="key" class="w-16 h-16 text-gray-300 mx-auto mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No licenses found</h3>
+            <p class="text-gray-600 mb-6">Add your first software license to start tracking usage and expiration dates.</p>
+            <button class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center mx-auto">
+              <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+              Add License
+            </button>
+          </div>
+        </div>
+
         <!-- Administration Tab -->
         <div v-if="activeTab === 'admin'" class="tab-content">
           <div class="mb-8">
@@ -583,18 +783,32 @@
           forecast: [],
           anomalies: [],
           systemInfo: null,
+          capacityData: {
+            totalCPU: 0,
+            totalMemory: 0,
+            usedCPU: 0,
+            usedMemory: 0,
+            maxVMs: 0,
+            currentVMs: 0,
+            recommendations: []
+          },
+          licenses: [],
           loading: {
             recommendations: false,
             vms: false,
             analytics: false,
             anomalies: false,
-            connectionTest: false
+            connectionTest: false,
+            capacity: false,
+            licenses: false
           },
           tabs: [
             { id: 'overview', name: 'Overview', icon: 'layout-dashboard' },
             { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
             { id: 'vms', name: 'Virtual Machines', icon: 'server' },
             { id: 'analytics', name: 'Analytics', icon: 'bar-chart-3' },
+            { id: 'capacity', name: 'Capacity Planner', icon: 'cpu' },
+            { id: 'licenses', name: 'License Management', icon: 'key' },
             { id: 'admin', name: 'Administration', icon: 'settings' }
           ],
           stats: [
@@ -864,6 +1078,98 @@
             this.showNotification('Mac stats updated successfully', 'success');
           } catch (error) {
             this.showNotification('Failed to get Mac stats: ' + error.message, 'error');
+          }
+        },
+
+        // Capacity Planner methods
+        async loadCapacityData() {
+          this.loading.capacity = true;
+          try {
+            const response = await fetch('http://localhost:8001/capacity/analysis');
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            this.capacityData = data;
+            this.showNotification('Capacity analysis updated successfully!', 'success');
+          } catch (error) {
+            console.error('Failed to load capacity data:', error);
+            // Fallback to mock data for demonstration
+            this.capacityData = {
+              totalCPU: this.systemInfo?.cpu_count || 11,
+              totalMemory: this.systemInfo?.memory_total_gb || 18,
+              usedCPU: 45.2,
+              usedMemory: 34.5,
+              maxVMs: 8,
+              currentVMs: 1,
+              recommendations: [
+                {
+                  id: 1,
+                  title: 'Optimize Resource Allocation',
+                  description: 'Current utilization allows for 7 additional VMs with 2 CPU cores and 4GB RAM each.'
+                },
+                {
+                  id: 2,
+                  title: 'Consider Memory Upgrade',
+                  description: 'Adding 16GB RAM would increase capacity to 12 additional VMs.'
+                }
+              ]
+            };
+            this.showNotification('Using estimated capacity data', 'info');
+          } finally {
+            this.loading.capacity = false;
+          }
+        },
+
+        // License Management methods
+        async loadLicenses() {
+          this.loading.licenses = true;
+          try {
+            const response = await fetch('http://localhost:8001/licenses');
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            this.licenses = data;
+            this.showNotification('Licenses loaded successfully!', 'success');
+          } catch (error) {
+            console.error('Failed to load licenses:', error);
+            // Fallback to mock data for demonstration
+            this.licenses = [
+              {
+                id: 1,
+                name: 'VMware vSphere',
+                vendor: 'VMware',
+                type: 'Perpetual',
+                status: 'active',
+                used: 8,
+                total: 16,
+                expiryDate: '2025-12-31'
+              },
+              {
+                id: 2,
+                name: 'Windows Server 2022',
+                vendor: 'Microsoft',
+                type: 'Subscription',
+                status: 'expiring',
+                used: 12,
+                total: 20,
+                expiryDate: '2025-08-15'
+              },
+              {
+                id: 3,
+                name: 'Prometheus Enterprise',
+                vendor: 'Prometheus',
+                type: 'Annual',
+                status: 'active',
+                used: 3,
+                total: 10,
+                expiryDate: '2026-03-20'
+              }
+            ];
+            this.showNotification('Using sample license data', 'info');
+          } finally {
+            this.loading.licenses = false;
           }
         },
 

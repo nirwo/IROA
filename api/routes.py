@@ -8,6 +8,10 @@ from ml.anomaly import detect_anomalies
 from monitoring.mac_monitor import MacSystemMonitor
 import threading
 import time
+import psutil
+import platform
+from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
 router = APIRouter()
 
@@ -362,3 +366,311 @@ async def get_prometheus_analytics():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch Prometheus analytics: {str(e)}")
+
+
+# Capacity Planner endpoints
+@router.get("/capacity/analysis")
+async def get_capacity_analysis():
+    """Get infrastructure capacity analysis and recommendations"""
+    try:
+        # Get current system metrics
+        cpu_count = psutil.cpu_count()
+        memory_total = psutil.virtual_memory().total / (1024**3)  # GB
+        cpu_percent = psutil.cpu_percent(interval=1)
+        memory_percent = psutil.virtual_memory().percent
+        
+        # Calculate capacity based on current utilization
+        # Assume each VM needs 2 CPU cores and 4GB RAM on average
+        vm_cpu_requirement = 2
+        vm_memory_requirement = 4  # GB
+        
+        # Calculate max VMs with 20% safety buffer
+        max_vms_by_cpu = int((cpu_count * 0.8) / vm_cpu_requirement)
+        max_vms_by_memory = int((memory_total * 0.8) / vm_memory_requirement)
+        max_vms = min(max_vms_by_cpu, max_vms_by_memory)
+        
+        # Current VMs (simplified - in real scenario would query hypervisor)
+        current_vms = 1  # Mac system VM
+        
+        # Generate recommendations
+        recommendations = []
+        
+        if max_vms - current_vms > 5:
+            recommendations.append({
+                "id": 1,
+                "title": "Excellent Capacity Available",
+                "description": f"Your infrastructure can support {max_vms - current_vms} additional VMs with current resource allocation."
+            })
+        elif max_vms - current_vms > 0:
+            recommendations.append({
+                "id": 2,
+                "title": "Limited Capacity Available",
+                "description": f"Consider optimizing current VMs or upgrading hardware. Only {max_vms - current_vms} additional VMs possible."
+            })
+        else:
+            recommendations.append({
+                "id": 3,
+                "title": "Capacity Limit Reached",
+                "description": "Infrastructure is at capacity. Consider upgrading CPU or memory resources."
+            })
+            
+        if memory_percent > 80:
+            recommendations.append({
+                "id": 4,
+                "title": "High Memory Utilization",
+                "description": "Memory usage is high. Consider adding more RAM to increase VM capacity."
+            })
+            
+        if cpu_percent > 80:
+            recommendations.append({
+                "id": 5,
+                "title": "High CPU Utilization",
+                "description": "CPU usage is high. Consider upgrading to more CPU cores for better performance."
+            })
+        
+        return {
+            "totalCPU": cpu_count,
+            "totalMemory": round(memory_total, 1),
+            "usedCPU": cpu_percent,
+            "usedMemory": memory_percent,
+            "maxVMs": max_vms,
+            "currentVMs": current_vms,
+            "recommendations": recommendations,
+            "analysis_time": datetime.now().isoformat(),
+            "vm_requirements": {
+                "cpu_per_vm": vm_cpu_requirement,
+                "memory_per_vm": vm_memory_requirement,
+                "safety_buffer": "20%"
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze capacity: {str(e)}")
+
+
+# License Management endpoints
+class License(BaseModel):
+    id: int
+    name: str
+    vendor: str
+    type: str
+    status: str
+    used: int
+    total: int
+    expiryDate: str
+    description: str = ""
+    cost: float = 0.0
+
+
+# In-memory license storage (in production, use a database)
+license_storage: List[Dict[str, Any]] = [
+    {
+        "id": 1,
+        "name": "VMware vSphere Standard",
+        "vendor": "VMware",
+        "type": "Perpetual",
+        "status": "active",
+        "used": 8,
+        "total": 16,
+        "expiryDate": "2025-12-31",
+        "description": "Virtualization platform for data center",
+        "cost": 2995.0
+    },
+    {
+        "id": 2,
+        "name": "Windows Server 2022 Datacenter",
+        "vendor": "Microsoft",
+        "type": "Subscription",
+        "status": "expiring",
+        "used": 12,
+        "total": 20,
+        "expiryDate": "2025-08-15",
+        "description": "Windows Server operating system licenses",
+        "cost": 6155.0
+    },
+    {
+        "id": 3,
+        "name": "Prometheus Enterprise",
+        "vendor": "Prometheus",
+        "type": "Annual",
+        "status": "active",
+        "used": 3,
+        "total": 10,
+        "expiryDate": "2026-03-20",
+        "description": "Monitoring and alerting toolkit",
+        "cost": 5000.0
+    },
+    {
+        "id": 4,
+        "name": "Red Hat Enterprise Linux",
+        "vendor": "Red Hat",
+        "type": "Subscription",
+        "status": "active",
+        "used": 5,
+        "total": 25,
+        "expiryDate": "2025-11-30",
+        "description": "Enterprise Linux operating system",
+        "cost": 3500.0
+    },
+    {
+        "id": 5,
+        "name": "Zabbix Professional",
+        "vendor": "Zabbix",
+        "type": "Annual",
+        "status": "expired",
+        "used": 0,
+        "total": 100,
+        "expiryDate": "2024-12-31",
+        "description": "Network and infrastructure monitoring",
+        "cost": 2000.0
+    }
+]
+
+
+@router.get("/licenses")
+async def get_licenses():
+    """Get all software licenses"""
+    try:
+        # Update license statuses based on expiry dates
+        current_date = datetime.now()
+        
+        for license_item in license_storage:
+            expiry_date = datetime.strptime(license_item["expiryDate"], "%Y-%m-%d")
+            days_until_expiry = (expiry_date - current_date).days
+            
+            if days_until_expiry < 0:
+                license_item["status"] = "expired"
+            elif days_until_expiry <= 30:
+                license_item["status"] = "expiring"
+            else:
+                license_item["status"] = "active"
+        
+        return license_storage
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch licenses: {str(e)}")
+
+
+@router.post("/licenses")
+async def create_license(license: License):
+    """Create a new license entry"""
+    try:
+        # Generate new ID
+        new_id = max([l["id"] for l in license_storage], default=0) + 1
+        
+        new_license = {
+            "id": new_id,
+            "name": license.name,
+            "vendor": license.vendor,
+            "type": license.type,
+            "status": license.status,
+            "used": license.used,
+            "total": license.total,
+            "expiryDate": license.expiryDate,
+            "description": license.description,
+            "cost": license.cost
+        }
+        
+        license_storage.append(new_license)
+        
+        return {"status": "success", "message": "License created successfully", "license": new_license}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create license: {str(e)}")
+
+
+@router.get("/licenses/{license_id}")
+async def get_license(license_id: int):
+    """Get a specific license by ID"""
+    try:
+        license_item = next((l for l in license_storage if l["id"] == license_id), None)
+        
+        if not license_item:
+            raise HTTPException(status_code=404, detail="License not found")
+            
+        return license_item
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch license: {str(e)}")
+
+
+@router.put("/licenses/{license_id}")
+async def update_license(license_id: int, license: License):
+    """Update an existing license"""
+    try:
+        license_index = next((i for i, l in enumerate(license_storage) if l["id"] == license_id), None)
+        
+        if license_index is None:
+            raise HTTPException(status_code=404, detail="License not found")
+            
+        license_storage[license_index] = {
+            "id": license_id,
+            "name": license.name,
+            "vendor": license.vendor,
+            "type": license.type,
+            "status": license.status,
+            "used": license.used,
+            "total": license.total,
+            "expiryDate": license.expiryDate,
+            "description": license.description,
+            "cost": license.cost
+        }
+        
+        return {"status": "success", "message": "License updated successfully", "license": license_storage[license_index]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update license: {str(e)}")
+
+
+@router.delete("/licenses/{license_id}")
+async def delete_license(license_id: int):
+    """Delete a license"""
+    try:
+        license_index = next((i for i, l in enumerate(license_storage) if l["id"] == license_id), None)
+        
+        if license_index is None:
+            raise HTTPException(status_code=404, detail="License not found")
+            
+        deleted_license = license_storage.pop(license_index)
+        
+        return {"status": "success", "message": "License deleted successfully", "license": deleted_license}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete license: {str(e)}")
+
+
+@router.get("/licenses/summary")
+async def get_license_summary():
+    """Get license usage summary and statistics"""
+    try:
+        total_licenses = len(license_storage)
+        active_licenses = len([l for l in license_storage if l["status"] == "active"])
+        expiring_licenses = len([l for l in license_storage if l["status"] == "expiring"])
+        expired_licenses = len([l for l in license_storage if l["status"] == "expired"])
+        
+        total_cost = sum([l["cost"] for l in license_storage])
+        total_capacity = sum([l["total"] for l in license_storage])
+        total_used = sum([l["used"] for l in license_storage])
+        
+        utilization_rate = (total_used / total_capacity * 100) if total_capacity > 0 else 0
+        
+        return {
+            "total_licenses": total_licenses,
+            "active_licenses": active_licenses,
+            "expiring_licenses": expiring_licenses,
+            "expired_licenses": expired_licenses,
+            "total_cost": total_cost,
+            "total_capacity": total_capacity,
+            "total_used": total_used,
+            "utilization_rate": round(utilization_rate, 2),
+            "summary_date": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate license summary: {str(e)}")
