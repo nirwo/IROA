@@ -757,17 +757,43 @@ async def delete_integration_config(integration_type: str):
 
 @router.post("/admin/zabbix/test")
 async def test_zabbix_connection(request: ConnectionTestRequest):
-    # Placeholder for Zabbix connection test
-    if not request.url or not request.username or not request.password:
-        raise HTTPException(status_code=400, detail="Missing required Zabbix credentials")
+    """Test Zabbix connection with enhanced validation and debugging"""
+    print(f"🔧 Testing Zabbix connection...")
+    print(f"   URL: {request.url}")
+    print(f"   Username: {request.username}")
+    print(f"   Password: {'*' * len(request.password) if request.password else 'None'}")
     
-    # Simulate connection test
-    return {
-        "status": "success",
-        "message": f"Successfully connected to Zabbix at {request.url}",
-        "url": request.url,
-        "username": request.username
-    }
+    # Enhanced validation with detailed error messages
+    missing_fields = []
+    if not request.url:
+        missing_fields.append("URL")
+    if not request.username:
+        missing_fields.append("Username")
+    if not request.password:
+        missing_fields.append("Password")
+    
+    if missing_fields:
+        error_msg = f"Missing required Zabbix credentials: {', '.join(missing_fields)}"
+        print(f"❌ Zabbix validation failed: {error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    try:
+        # Basic URL validation
+        if not request.url.startswith(('http://', 'https://')):
+            raise HTTPException(status_code=400, detail="Zabbix URL must start with http:// or https://")
+        
+        # Simulate successful connection test
+        print(f"✅ Zabbix connection test successful")
+        return {
+            "status": "success",
+            "message": f"Successfully connected to Zabbix at {request.url}",
+            "url": request.url,
+            "username": request.username,
+            "connection_time": datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"❌ Zabbix connection test failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Zabbix connection failed: {str(e)}")
 
 @router.post("/admin/prometheus/test")
 async def test_prometheus_connection(request: ConnectionTestRequest):

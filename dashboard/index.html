@@ -135,8 +135,71 @@
             <p class="text-gray-600">Monitor your virtualization infrastructure at a glance</p>
           </div>
 
-          <!-- Stats Grid -->
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <!-- vCenter Infrastructure Overview -->
+          <div v-if="infrastructure.summary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-600">Total VMs</p>
+                  <p class="text-2xl font-bold text-gray-900 mt-1">{{ infrastructure.summary.total_vms }}</p>
+                </div>
+                <div class="bg-blue-500 w-12 h-12 rounded-lg flex items-center justify-center">
+                  <i data-lucide="monitor" class="w-6 h-6 text-white"></i>
+                </div>
+              </div>
+              <div class="mt-4 flex items-center">
+                <span class="text-green-600 text-sm font-medium">{{ infrastructure.summary.running_vms }} running</span>
+              </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-600">ESXi Hosts</p>
+                  <p class="text-2xl font-bold text-gray-900 mt-1">{{ infrastructure.summary.total_hosts }}</p>
+                </div>
+                <div class="bg-green-500 w-12 h-12 rounded-lg flex items-center justify-center">
+                  <i data-lucide="server" class="w-6 h-6 text-white"></i>
+                </div>
+              </div>
+              <div class="mt-4 flex items-center">
+                <span class="text-blue-600 text-sm font-medium">{{ infrastructure.summary.total_clusters }} clusters</span>
+              </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-600">CPU Cores</p>
+                  <p class="text-2xl font-bold text-gray-900 mt-1">{{ infrastructure.summary.total_cpu_cores }}</p>
+                </div>
+                <div class="bg-purple-500 w-12 h-12 rounded-lg flex items-center justify-center">
+                  <i data-lucide="cpu" class="w-6 h-6 text-white"></i>
+                </div>
+              </div>
+              <div class="mt-4 flex items-center">
+                <span class="text-purple-600 text-sm font-medium">Total compute capacity</span>
+              </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-600">Memory</p>
+                  <p class="text-2xl font-bold text-gray-900 mt-1">{{ Math.round(infrastructure.summary.total_memory_gb) }}GB</p>
+                </div>
+                <div class="bg-orange-500 w-12 h-12 rounded-lg flex items-center justify-center">
+                  <i data-lucide="memory-stick" class="w-6 h-6 text-white"></i>
+                </div>
+              </div>
+              <div class="mt-4 flex items-center">
+                <span class="text-orange-600 text-sm font-medium">Total memory capacity</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Fallback Stats Grid (when no vCenter data) -->
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div v-for="stat in stats" :key="stat.title" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <div class="flex items-center justify-between">
                 <div>
@@ -155,6 +218,16 @@
                 </span>
                 <span class="text-gray-500 text-sm ml-1">vs last month</span>
               </div>
+            </div>
+            
+            <!-- No vCenter Data Message -->
+            <div class="col-span-full text-center py-8 bg-yellow-50 rounded-xl border border-yellow-200">
+              <i data-lucide="alert-triangle" class="w-12 h-12 mx-auto mb-2 text-yellow-500"></i>
+              <h3 class="text-lg font-semibold text-yellow-800 mb-2">No vCenter Data Available</h3>
+              <p class="text-yellow-700 mb-4">Connect to your vCenter server to see real infrastructure data.</p>
+              <button @click="setActiveTab('administration')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition-colors">
+                Configure vCenter
+              </button>
             </div>
           </div>
 
@@ -1284,7 +1357,24 @@
             vcenterSync: false,
             infrastructure: false
           },
-          apiBaseUrl: window.location.protocol + '//' + window.location.hostname + ':8001',
+          apiBaseUrl: (() => {
+            // Detect the correct API base URL for both local and remote server deployment
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            const port = '8001';
+            
+            // Construct API base URL
+            const baseUrl = `${protocol}//${hostname}:${port}`;
+            
+            // Debug logging
+            console.log('🔗 API Base URL Configuration:');
+            console.log('   Protocol:', protocol);
+            console.log('   Hostname:', hostname);
+            console.log('   Port:', port);
+            console.log('   Full API URL:', baseUrl);
+            
+            return baseUrl;
+          })(),
           tabs: [
             { id: 'overview', name: 'Overview', icon: 'layout-grid' },
             { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
@@ -1334,6 +1424,37 @@
           );
         }
       },
+      async mounted() {
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Run network diagnostics for debugging
+        await this.runNetworkDiagnostics();
+        
+        // Check API connection
+        await this.checkApiConnection();
+        
+        // Load initial data
+        await this.loadSystemInfo();
+        await this.checkEndpointStatus();
+        await this.loadIntegrationConfig();
+        
+        // Load infrastructure data for Overview page
+        await this.loadInfrastructure();
+        
+        // Load data for active tab
+        if (this.activeTab === 'vms') {
+          this.loadUnderutilizedVMs();
+        } else if (this.activeTab === 'infrastructure') {
+          this.loadInfrastructure();
+        } else if (this.activeTab === 'capacity') {
+          this.loadCapacityData();
+        } else if (this.activeTab === 'profiles') {
+          this.loadProfilePreview();
+        } else if (this.activeTab === 'licenses') {
+          this.loadLicenses();
+        }
+      },
       methods: {
         // Tab management
         setActiveTab(tab) {
@@ -1374,18 +1495,80 @@
         },
 
         // API connectivity check with proper error handling
-        async checkAPIConnection() {
+        async checkApiConnection() {
           try {
-            const response = await fetch(`${this.apiBaseUrl}/health`);
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
+            console.log('🔍 Testing API connection to:', this.apiBaseUrl);
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
+            const response = await fetch(`${this.apiBaseUrl}/health`, {
+              method: 'GET',
+              signal: controller.signal,
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              console.log('✅ API connection successful');
+              this.apiConnected = true;
+              return true;
+            } else {
+              console.error('❌ API connection failed with status:', response.status, response.statusText);
+              this.apiConnected = false;
+              return false;
             }
-            const data = await response.json();
-            this.apiConnected = data.status === 'ok';
           } catch (error) {
-            console.warn('API connection check failed:', error);
+            console.error('❌ API connection error:', error);
+            if (error.name === 'AbortError') {
+              console.error('   ⏱️ Connection timeout - API server may be unreachable');
+            } else if (error.message.includes('Failed to fetch')) {
+              console.error('   🌐 Network error - check if API server is running on port 8001');
+              console.error('   🔗 Expected API URL:', this.apiBaseUrl);
+            }
             this.apiConnected = false;
+            return false;
           }
+        },
+
+        // Network diagnostic function for troubleshooting remote server issues
+        async runNetworkDiagnostics() {
+          console.log('🔍 Running network diagnostics...');
+          console.log('   🌐 Current URL:', window.location.href);
+          console.log('   💻 Client hostname:', window.location.hostname);
+          console.log('   🔗 API base URL:', this.apiBaseUrl);
+          
+          // Test basic connectivity
+          const tests = [
+            { name: 'API Health Check', url: `${this.apiBaseUrl}/health` },
+            { name: 'API System Info', url: `${this.apiBaseUrl}/system/info` },
+            { name: 'API VMs Endpoint', url: `${this.apiBaseUrl}/vms` }
+          ];
+          
+          for (const test of tests) {
+            try {
+              console.log(`   🧪 Testing ${test.name}...`);
+              const response = await fetch(test.url, { 
+                method: 'GET',
+                timeout: 5000,
+                headers: { 'Accept': 'application/json' }
+              });
+              
+              if (response.ok) {
+                console.log(`   ✅ ${test.name}: SUCCESS (${response.status})`);
+              } else {
+                console.log(`   ❌ ${test.name}: FAILED (${response.status} ${response.statusText})`);
+              }
+            } catch (error) {
+              console.log(`   ❌ ${test.name}: ERROR - ${error.message}`);
+            }
+          }
+          
+          console.log('🔍 Network diagnostics complete.');
         },
 
         // System information with proper error handling
