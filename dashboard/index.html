@@ -954,8 +954,10 @@
         // Load system information for dynamic OS detection
         this.loadSystemInfo();
         
-        // Always load VMs on startup
-        this.loadUnderutilizedVMs();
+        // Always load VMs on startup with proper error handling
+        setTimeout(() => {
+          this.loadUnderutilizedVMs();
+        }, 500); // Small delay to ensure API is ready
         
         // Initialize charts after a short delay
         this.$nextTick(() => {

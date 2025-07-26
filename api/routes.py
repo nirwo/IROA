@@ -231,9 +231,9 @@ async def get_prometheus_system_metrics():
         memory_response = requests.get(f"{prometheus_url}/api/v1/query",
                                      params={"query": "((node_memory_active_bytes + node_memory_wired_bytes) / node_memory_total_bytes) * 100"})
         
-        # Get disk usage for root filesystem
+        # Get disk usage for root filesystem (using avail_bytes for macOS compatibility)
         disk_response = requests.get(f"{prometheus_url}/api/v1/query",
-                                   params={"query": "100 - ((node_filesystem_free_bytes{{mountpoint='/'}} * 100) / node_filesystem_size_bytes{{mountpoint='/'}})"})
+                                   params={"query": "100 - ((node_filesystem_avail_bytes{mountpoint='/'} * 100) / node_filesystem_size_bytes{mountpoint='/'})"})
         
         # Parse responses
         cpu_usage = 0
@@ -241,8 +241,11 @@ async def get_prometheus_system_metrics():
             cpu_data = cpu_response.json()
             if cpu_data.get('data', {}).get('result'):
                 load_avg = float(cpu_data['data']['result'][0]['value'][1])
+                # Get system info for dynamic core count
+                import psutil
+                cores = psutil.cpu_count()
                 # Convert load average to percentage (load/cores * 100)
-                cpu_usage = min((load_avg / 10) * 100, 100)  # 10 cores
+                cpu_usage = min((load_avg / cores) * 100, 100)
         
         memory_usage = 0
         if memory_response.status_code == 200:
