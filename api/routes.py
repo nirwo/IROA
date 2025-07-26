@@ -314,10 +314,67 @@ async def sync_vcenter_vms():
         print(f"❌ vCenter sync failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"vCenter sync failed: {str(e)}")
 
+# vCenter Infrastructure Inventory API Endpoints
+
+@router.get("/admin/vcenter/inventory")
+async def get_vcenter_inventory():
+    """Get complete vCenter infrastructure inventory"""
+    global vcenter_inventory_cache
+    
+    if not vcenter_inventory_cache:
+        return {
+            "status": "no_data",
+            "message": "No vCenter inventory data available. Please sync first."
+        }
+    
+    return {
+        "status": "success",
+        "inventory": vcenter_inventory_cache
+    }
+
+@router.get("/admin/vcenter/clusters")
+async def get_vcenter_clusters():
+    """Get vCenter compute clusters with resource utilization"""
+    global vcenter_inventory_cache
+    
+    if not vcenter_inventory_cache or "clusters" not in vcenter_inventory_cache:
+        return {"status": "no_data", "clusters": []}
+    
+    return {
+        "status": "success",
+        "clusters": vcenter_inventory_cache["clusters"]
+    }
+
+@router.get("/admin/vcenter/hosts")
+async def get_vcenter_hosts():
+    """Get vCenter ESXi hosts with resource utilization"""
+    global vcenter_inventory_cache
+    
+    if not vcenter_inventory_cache or "hosts" not in vcenter_inventory_cache:
+        return {"status": "no_data", "hosts": []}
+    
+    return {
+        "status": "success",
+        "hosts": vcenter_inventory_cache["hosts"]
+    }
+
+@router.get("/admin/vcenter/datastores")
+async def get_vcenter_datastores():
+    """Get vCenter datastores with storage utilization"""
+    global vcenter_inventory_cache
+    
+    if not vcenter_inventory_cache or "datastores" not in vcenter_inventory_cache:
+        return {"status": "no_data", "datastores": []}
+    
+    return {
+        "status": "success",
+        "datastores": vcenter_inventory_cache["datastores"]
+    }
+
 @router.post("/admin/vcenter/sync-with-credentials")
-async def sync_vcenter_vms_with_credentials(request: ConnectionTestRequest):
-    """Pull all VM data from vCenter with provided credentials"""
-    print("🔄 Starting vCenter VM sync with credentials...")
+async def sync_vcenter_inventory_with_credentials(request: ConnectionTestRequest):
+    """Pull complete vCenter infrastructure inventory with provided credentials"""
+    print("🔄 Starting comprehensive vCenter inventory sync...")
     
     if not request.host or not request.username or not request.password:
         raise HTTPException(status_code=400, detail="Missing vCenter credentials for VM sync")
@@ -337,7 +394,6 @@ async def sync_vcenter_vms_with_credentials(request: ConnectionTestRequest):
         context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         context.verify_mode = ssl.CERT_NONE
         
-        # Connect to vCenter
         si = SmartConnect(
             host=request.host,
             user=request.username,
@@ -349,86 +405,254 @@ async def sync_vcenter_vms_with_credentials(request: ConnectionTestRequest):
         if not si:
             raise HTTPException(status_code=400, detail="Failed to connect to vCenter")
         
-        print("✅ Connected to vCenter, retrieving VM data...")
-        
-        # Get content and find all VMs
         content = si.RetrieveContent()
-        container = content.viewManager.CreateContainerView(
+        inventory_data = {}
+        
+        # 1. Get Datacenters
+        print("📍 Collecting datacenter information...")
+        datacenters = []
+        for datacenter in content.rootFolder.childEntity:
+            if isinstance(datacenter, vim.Datacenter):
+                dc_data = {
+                    "name": datacenter.name,
+                    "moid": datacenter._moId,
+                    "clusters": [],
+                    "hosts": [],
+                    "datastores": [],
+                    "networks": []
+                }
+                datacenters.append(dc_data)
+        
+        # 2. Get Compute Clusters and Hosts
+        print("🖥️ Collecting cluster and host information...")
+        clusters = []
+        hosts = []
+        
+        cluster_container = content.viewManager.CreateContainerView(
+            content.rootFolder, [vim.ClusterComputeResource], True
+        )
+        
+        for cluster in cluster_container.view:
+            # Cluster resource summary
+            summary = cluster.summary
+            cluster_data = {
+                "name": cluster.name,
+                "moid": cluster._moId,
+                "datacenter": cluster.parent.parent.name if cluster.parent and cluster.parent.parent else "Unknown",
+                "total_cpu_cores": summary.numCpuCores,
+                "total_cpu_mhz": summary.totalCpu,
+                "used_cpu_mhz": summary.totalCpu - summary.effectiveCpu if summary.effectiveCpu else 0,
+                "total_memory_gb": round(summary.totalMemory / (1024**3), 2),
+                "used_memory_gb": round((summary.totalMemory - summary.effectiveMemory * 1024**2) / (1024**3), 2) if summary.effectiveMemory else 0,
+                "num_hosts": summary.numHosts,
+                "num_vms": 0,  # Will be calculated later
+                "drs_enabled": cluster.configuration.drsConfig.enabled if cluster.configuration.drsConfig else False,
+                "ha_enabled": cluster.configuration.dasConfig.enabled if cluster.configuration.dasConfig else False,
+                "hosts": []
+            }
+            
+            # Get hosts in this cluster
+            for host in cluster.host:
+                host_summary = host.summary
+                host_data = {
+                    "name": host.name,
+                    "moid": host._moId,
+                    "cluster": cluster.name,
+                    "datacenter": cluster.parent.parent.name if cluster.parent and cluster.parent.parent else "Unknown",
+                    "cpu_cores": host_summary.hardware.numCpuCores,
+                    "cpu_mhz": host_summary.hardware.cpuMhz * host_summary.hardware.numCpuCores,
+                    "memory_gb": round(host_summary.hardware.memorySize / (1024**3), 2),
+                    "cpu_usage_mhz": host_summary.quickStats.overallCpuUsage if host_summary.quickStats else 0,
+                    "memory_usage_gb": round(host_summary.quickStats.overallMemoryUsage / 1024, 2) if host_summary.quickStats else 0,
+                    "power_state": str(host_summary.runtime.powerState),
+                    "connection_state": str(host_summary.runtime.connectionState),
+                    "num_vms": len(host.vm),
+                    "vendor": host_summary.hardware.vendor,
+                    "model": host_summary.hardware.model,
+                    "version": host_summary.config.product.version if host_summary.config.product else "Unknown"
+                }
+                hosts.append(host_data)
+                cluster_data["hosts"].append(host_data)
+            
+            clusters.append(cluster_data)
+        
+        cluster_container.Destroy()
+        
+        # 3. Get Datastores
+        print("💾 Collecting datastore information...")
+        datastores = []
+        
+        datastore_container = content.viewManager.CreateContainerView(
+            content.rootFolder, [vim.Datastore], True
+        )
+        
+        for ds in datastore_container.view:
+            if ds.summary.accessible:
+                ds_data = {
+                    "name": ds.name,
+                    "moid": ds._moId,
+                    "type": ds.summary.type,
+                    "capacity_gb": round(ds.summary.capacity / (1024**3), 2),
+                    "free_space_gb": round(ds.summary.freeSpace / (1024**3), 2),
+                    "used_space_gb": round((ds.summary.capacity - ds.summary.freeSpace) / (1024**3), 2),
+                    "usage_percent": round(((ds.summary.capacity - ds.summary.freeSpace) / ds.summary.capacity) * 100, 1),
+                    "accessible": ds.summary.accessible,
+                    "maintenance_mode": ds.summary.maintenanceMode if hasattr(ds.summary, 'maintenanceMode') else "normal",
+                    "num_vms": len(ds.vm) if ds.vm else 0
+                }
+                datastores.append(ds_data)
+        
+        datastore_container.Destroy()
+        
+        # 4. Get Networks
+        print("🌐 Collecting network information...")
+        networks = []
+        
+        network_container = content.viewManager.CreateContainerView(
+            content.rootFolder, [vim.Network], True
+        )
+        
+        for network in network_container.view:
+            net_data = {
+                "name": network.name,
+                "moid": network._moId,
+                "accessible": network.summary.accessible if hasattr(network.summary, 'accessible') else True,
+                "num_vms": len(network.vm) if network.vm else 0
+            }
+            networks.append(net_data)
+        
+        network_container.Destroy()
+        
+        # 5. Get VMs with enhanced cluster/datacenter mapping
+        print("🖥️ Collecting virtual machine information...")
+        vm_container = content.viewManager.CreateContainerView(
             content.rootFolder, [vim.VirtualMachine], True
         )
         
-        vms_data = []
-        vm_count = 0
+        vms = []
+        underutilized_vms = []
         
-        for vm in container.view:
+        print(f"📊 Processing {len(vm_container.view)} VMs...")
+        
+        for vm in vm_container.view:
             try:
-                vm_count += 1
-                print(f"📊 Processing VM {vm_count}: {vm.name}")
-                
-                # Get VM summary
                 summary = vm.summary
                 config = summary.config
                 runtime = summary.runtime
                 
-                # Get resource usage
+                # Get datacenter and cluster info
+                datacenter_name = "Unknown"
+                cluster_name = "Unknown"
+                host_name = "Unknown"
+                
+                if vm.runtime.host:
+                    host_name = vm.runtime.host.name
+                    if vm.runtime.host.parent:
+                        cluster_name = vm.runtime.host.parent.name
+                        if vm.runtime.host.parent.parent and vm.runtime.host.parent.parent.parent:
+                            datacenter_name = vm.runtime.host.parent.parent.parent.name
+                
+                # Calculate resource usage
                 cpu_usage = 0
                 memory_usage = 0
                 
                 if summary.quickStats:
-                    # Calculate CPU usage percentage
-                    if config.numCpu and summary.quickStats.overallCpuUsage:
-                        cpu_usage = (summary.quickStats.overallCpuUsage / (config.numCpu * 1000)) * 100
+                    if summary.quickStats.overallCpuUsage and config.numCpu:
+                        cpu_mhz_per_core = 2000
+                        total_cpu_mhz = config.numCpu * cpu_mhz_per_core
+                        cpu_usage = (summary.quickStats.overallCpuUsage / total_cpu_mhz) * 100
                     
-                    # Calculate memory usage percentage  
-                    if config.memorySizeMB and summary.quickStats.guestMemoryUsage:
-                        memory_usage = (summary.quickStats.guestMemoryUsage / config.memorySizeMB) * 100
-                
-                # Determine if VM is underutilized
-                is_underutilized = cpu_usage < 30 and memory_usage < 50
+                    if summary.quickStats.hostMemoryUsage and config.memorySizeMB:
+                        memory_usage = (summary.quickStats.hostMemoryUsage / config.memorySizeMB) * 100
                 
                 vm_data = {
-                    "vm": vm.name,
-                    "status": runtime.powerState.lower() if runtime.powerState else "unknown",
-                    "cpu": round(cpu_usage, 2),
-                    "memory_usage": round(memory_usage, 2),
-                    "cores": config.numCpu if config.numCpu else 0,
-                    "memory": round(config.memorySizeMB / 1024, 2) if config.memorySizeMB else 0,
-                    "cluster": vm.runtime.host.parent.name if vm.runtime.host and vm.runtime.host.parent else "unknown",
+                    "vm": config.name,
+                    "status": "running" if runtime.powerState == vim.VirtualMachinePowerState.poweredOn else "stopped",
+                    "cpu": round(cpu_usage, 1),
+                    "memory_usage": round(memory_usage, 1),
+                    "cores": config.numCpu,
+                    "memory": round(config.memorySizeMB / 1024, 1),
+                    "cluster": cluster_name,
+                    "datacenter": datacenter_name,
+                    "host": host_name,
                     "source": "vcenter",
+                    "guest_os": config.guestFullName or "Unknown",
+                    "tools_status": vm.guest.toolsStatus if vm.guest else "Unknown",
+                    "uuid": config.uuid,
                     "details": {
-                        "avg_cpu": round(cpu_usage, 2),
-                        "avg_mem": round(memory_usage, 2),
-                        "disk_usage": round((summary.storage.committed / summary.storage.provisioned * 100), 2) if summary.storage and summary.storage.provisioned > 0 else 0
-                    },
-                    "suggestion": "Consider rightsizing this VM" if is_underutilized else "VM utilization is normal",
-                    "guest_os": config.guestFullName if config.guestFullName else "Unknown",
-                    "tools_status": summary.guest.toolsStatus if summary.guest else "unknown",
-                    "uuid": config.uuid if config.uuid else ""
+                        "avg_cpu": round(cpu_usage, 1),
+                        "avg_mem": round(memory_usage, 1),
+                        "disk_usage": round((summary.storage.committed / (1024**3)), 1) if summary.storage else 0,
+                        "power_state": str(runtime.powerState),
+                        "annotation": config.annotation or ""
+                    }
                 }
                 
-                vms_data.append(vm_data)
+                vms.append(vm_data)
                 
-            except Exception as vm_error:
-                print(f"⚠️ Error processing VM {vm.name}: {str(vm_error)}")
+                # Update cluster VM count
+                for cluster in clusters:
+                    if cluster["name"] == cluster_name:
+                        cluster["num_vms"] += 1
+                        break
+                
+                # Check if VM is underutilized
+                if runtime.powerState == vim.VirtualMachinePowerState.poweredOn and cpu_usage < 30 and memory_usage < 50:
+                    underutilized_vms.append(vm_data)
+                    
+            except Exception as e:
+                print(f"⚠️ Error processing VM {vm.name if hasattr(vm, 'name') else 'Unknown'}: {e}")
                 continue
         
-        # Clean up
-        container.Destroy()
+        vm_container.Destroy()
+        
+        # Store comprehensive inventory in global cache
+        global vcenter_vms_cache, vcenter_inventory_cache
+        vcenter_vms_cache = vms
+        vcenter_inventory_cache = {
+            "datacenters": datacenters,
+            "clusters": clusters,
+            "hosts": hosts,
+            "datastores": datastores,
+            "networks": networks,
+            "vms": vms,
+            "summary": {
+                "total_datacenters": len(datacenters),
+                "total_clusters": len(clusters),
+                "total_hosts": len(hosts),
+                "total_datastores": len(datastores),
+                "total_networks": len(networks),
+                "total_vms": len(vms),
+                "running_vms": len([vm for vm in vms if vm["status"] == "running"]),
+                "underutilized_vms": len(underutilized_vms),
+                "total_cpu_cores": sum(cluster["total_cpu_cores"] for cluster in clusters),
+                "total_memory_gb": sum(cluster["total_memory_gb"] for cluster in clusters),
+                "total_storage_gb": sum(ds["capacity_gb"] for ds in datastores),
+                "used_storage_gb": sum(ds["used_space_gb"] for ds in datastores)
+            }
+        }
+        
         Disconnect(si)
         
-        print(f"✅ Successfully synced {len(vms_data)} VMs from vCenter")
-        
-        # Store the synced data (you could save to database here)
-        global vcenter_vms_cache
-        vcenter_vms_cache = vms_data
+        print(f"✅ Successfully synced complete vCenter inventory:")
+        print(f"   📍 {len(datacenters)} datacenters")
+        print(f"   🏢 {len(clusters)} clusters")
+        print(f"   🖥️ {len(hosts)} hosts")
+        print(f"   💾 {len(datastores)} datastores")
+        print(f"   🌐 {len(networks)} networks")
+        print(f"   🖱️ {len(vms)} VMs ({len(underutilized_vms)} underutilized)")
         
         return {
             "status": "success",
-            "message": f"Successfully synced {len(vms_data)} VMs from vCenter {request.host}",
-            "vm_count": len(vms_data),
-            "underutilized_count": len([vm for vm in vms_data if vm['cpu'] < 30 and vm['memory_usage'] < 50]),
-            "vms": vms_data[:5],  # Return first 5 VMs as preview
-            "sync_timestamp": datetime.now().isoformat()
+            "message": f"Successfully synced complete vCenter inventory",
+            "inventory": vcenter_inventory_cache["summary"],
+            "datacenters": len(datacenters),
+            "clusters": len(clusters),
+            "hosts": len(hosts),
+            "datastores": len(datastores),
+            "networks": len(networks),
+            "vm_count": len(vms),
+            "underutilized_count": len(underutilized_vms)
         }
         
     except Exception as e:
@@ -442,8 +666,9 @@ async def sync_vcenter_vms_with_credentials(request: ConnectionTestRequest):
         else:
             raise HTTPException(status_code=500, detail=f"vCenter VM sync failed: {error_msg}")
 
-# Global cache for vCenter VMs (in production, use proper database)
+# Global cache for vCenter VMs and comprehensive inventory (in production, use proper database)
 vcenter_vms_cache = []
+vcenter_inventory_cache = {}
 
 # Configuration persistence
 CONFIG_FILE = "config/integrations.json"

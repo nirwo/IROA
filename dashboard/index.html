@@ -1004,7 +1004,29 @@
           underutilizedVMs: [],
           forecast: [],
           anomalies: [],
-          systemInfo: null,
+          profiles: [],
+          profileSummary: null,
+          infrastructure: {
+            datacenters: [],
+            clusters: [],
+            hosts: [],
+            datastores: [],
+            networks: [],
+            summary: {
+              total_datacenters: 0,
+              total_clusters: 0,
+              total_hosts: 0,
+              total_datastores: 0,
+              total_networks: 0,
+              total_vms: 0,
+              running_vms: 0,
+              underutilized_vms: 0,
+              total_cpu_cores: 0,
+              total_memory_gb: 0,
+              total_storage_gb: 0,
+              used_storage_gb: 0
+            }
+          },
           capacityData: {
             totalCPU: 0,
             totalMemory: 0,
@@ -1041,15 +1063,17 @@
             capacity: false,
             licenses: false,
             profiles: false,
-            vcenterSync: false
+            vcenterSync: false,
+            infrastructure: false
           },
           apiBaseUrl: window.location.protocol + '//' + window.location.hostname + ':8001',
           tabs: [
             { id: 'overview', name: 'Overview', icon: 'layout-grid' },
             { id: 'recommendations', name: 'Recommendations', icon: 'lightbulb' },
-            { id: 'vms', name: 'Virtual Machines', icon: 'server' },
+            { id: 'vms', name: 'Virtual Machines', icon: 'monitor' },
             { id: 'analytics', name: 'Analytics', icon: 'bar-chart-3' },
-            { id: 'capacity', name: 'Capacity Planner', icon: 'gauge' },
+            { id: 'infrastructure', name: 'Infrastructure', icon: 'server' },
+            { id: 'capacity', name: 'Capacity Planner', icon: 'cpu' },
             { id: 'profiles', name: 'Profile Preview', icon: 'layers' },
             { id: 'licenses', name: 'License Management', icon: 'key' },
             { id: 'administration', name: 'Administration', icon: 'settings' }
@@ -1704,6 +1728,29 @@
             this.showNotification('Failed to sync VMs from vCenter: ' + error.message, 'error');
           } finally {
             this.loading.vcenterSync = false;
+          }
+        },
+
+        // Load vCenter Infrastructure Inventory
+        async loadInfrastructure() {
+          this.loading.infrastructure = true;
+          try {
+            console.log('🏗️ Loading vCenter infrastructure inventory...');
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/vcenter/inventory`);
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+              this.infrastructure = data.inventory;
+              console.log('✅ Infrastructure data loaded:', this.infrastructure.summary);
+            } else {
+              console.log('ℹ️ No infrastructure data available:', data.message);
+              // Keep empty structure for UI
+            }
+          } catch (error) {
+            console.error('❌ Failed to load infrastructure:', error);
+          } finally {
+            this.loading.infrastructure = false;
           }
         },
 
