@@ -109,23 +109,16 @@ class ConnectionTestRequest(BaseModel):
 
 @router.get("/admin/mac/stats")
 async def get_mac_stats():
-    try:
-        temp_monitor = MacSystemMonitor()
-        system_info = temp_monitor.get_system_info()
-        cpu_usage = temp_monitor.get_cpu_usage()
-        memory_usage = temp_monitor.get_memory_usage()
-        disk_usage = temp_monitor.get_disk_usage()
-        temp_monitor.session.close()
-        
-        return {
-            "system_info": system_info,
-            "cpu_usage": cpu_usage,
-            "memory_usage": memory_usage,
-            "disk_usage": disk_usage,
-            "monitoring_active": monitoring_active
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get Mac stats: {str(e)}")
+    """Mac stats endpoint - disabled per user request"""
+    return {
+        "status": "disabled", 
+        "message": "Mac monitoring has been disabled",
+        "system_info": {"hostname": "disabled"},
+        "cpu_usage": 0,
+        "memory_usage": 0,
+        "disk_usage": 0,
+        "monitoring_active": False
+    }
 
 @router.post("/admin/vcenter/test")
 async def test_vcenter_connection(request: ConnectionTestRequest):
