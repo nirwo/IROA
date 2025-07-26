@@ -69,7 +69,8 @@ class MacSystemMonitor:
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             try:
                 proc_info = proc.info
-                if proc_info['cpu_percent'] > 0:
+                cpu_percent = proc_info.get('cpu_percent', 0)
+                if cpu_percent is not None and cpu_percent > 0:
                     processes.append(proc_info)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
@@ -135,9 +136,8 @@ class MacSystemMonitor:
                 timestamp=datetime.now(timezone.utc),
                 cpu_usage=max(0, vm_cpu),
                 memory_usage=max(0, vm_memory),
-                disk_usage=max(0, vm_disk),
-                network_in=network['bytes_recv'] // len(vms),  # Distribute network load
-                network_out=network['bytes_sent'] // len(vms)
+                disk_io=max(0, vm_disk),  # Use disk_io instead of disk_usage
+                net_io=(network['bytes_recv'] + network['bytes_sent']) // len(vms)  # Combined network I/O
             )
             
             self.session.add(metric)
