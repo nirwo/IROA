@@ -47,6 +47,9 @@
 </head>
 <body>
   <div id="app">
+    <!-- Vue.js Test - This should show 'Vue.js is working!' if mounted properly -->
+    <div v-if="false" style="display: none;">{{ 'Vue.js is working!' }}</div>
+    
     <!-- Notification System -->
     <div v-if="notification" :class="[
       'notification',
@@ -2161,44 +2164,55 @@
         }
       },
       async mounted() {
-        // Initialize Lucide icons
-        lucide.createIcons();
-        
-        // Run network diagnostics for debugging
-        await this.runNetworkDiagnostics();
-        
-        // Check API connection with error handling
         try {
-          await this.checkApiConnection();
-        } catch (error) {
-          console.error('❌ API connection check failed:', error);
-          this.apiConnected = false;
-        }
-        
-        // Check authentication status first
-        const isAuthenticated = await this.checkAuthStatus();
-        
-        if (isAuthenticated) {
-          // Load initial data only if authenticated
-          await this.loadSystemInfo();
-          await this.checkEndpointStatus();
-          await this.loadIntegrationConfig();
+          // Initialize Lucide icons
+          lucide.createIcons();
           
-          // Load infrastructure data for Overview page
-          await this.loadInfrastructure();
+          // Run network diagnostics for debugging
+          await this.runNetworkDiagnostics();
           
-          // Load data for active tab
-          if (this.activeTab === 'vms') {
-            this.loadUnderutilizedVMs();
-          } else if (this.activeTab === 'infrastructure') {
-            this.loadInfrastructure();
-          } else if (this.activeTab === 'capacity') {
-            this.loadCapacityData();
-          } else if (this.activeTab === 'profiles') {
-            this.loadProfilePreview();
-          } else if (this.activeTab === 'licenses') {
-            this.loadLicenses();
+          // Check API connection with error handling
+          try {
+            await this.checkApiConnection();
+          } catch (error) {
+            console.error('❌ API connection check failed:', error);
+            this.apiConnected = false;
           }
+          
+          // Check authentication status first - this will show login modal if not authenticated
+          const isAuthenticated = await this.checkAuthStatus();
+          console.log('🔐 Authentication status:', isAuthenticated);
+          
+          if (isAuthenticated) {
+            console.log('✅ User is authenticated, loading dashboard data...');
+            // Load initial data only if authenticated
+            await this.loadSystemInfo();
+            await this.checkEndpointStatus();
+            await this.loadIntegrationConfig();
+            
+            // Load infrastructure data for Overview page
+            await this.loadInfrastructure();
+            
+            // Load data for active tab
+            if (this.activeTab === 'vms') {
+              this.loadUnderutilizedVMs();
+            } else if (this.activeTab === 'infrastructure') {
+              this.loadInfrastructure();
+            } else if (this.activeTab === 'capacity') {
+              this.loadCapacityData();
+            } else if (this.activeTab === 'profiles') {
+              this.loadProfilePreview();
+            } else if (this.activeTab === 'licenses') {
+              this.loadLicenses();
+            }
+          } else {
+            console.log('❌ User is not authenticated, showing login modal...');
+            // Ensure login modal is visible
+            this.showLoginModal = true;
+          }
+        } catch (error) {
+          console.error('Error during component mounting:', error);
+          this.showNotification('Failed to initialize dashboard', 'error');
         }
       },
       methods: {
@@ -2322,6 +2336,8 @@
           const token = localStorage.getItem('iroa-auth-token');
           const userStr = localStorage.getItem('iroa-user');
           
+          console.log('🔍 Checking auth status...', { hasToken: !!token, hasUser: !!userStr });
+          
           if (token && userStr) {
             try {
               // Verify token is still valid
@@ -2336,9 +2352,12 @@
                 this.auth.isAuthenticated = true;
                 this.auth.user = user;
                 this.auth.token = token;
+                this.showLoginModal = false; // Hide login modal
                 await this.loadUserPermissions();
+                console.log('✅ Authentication successful, user:', user);
                 return true;
               } else {
+                console.log('❌ Token is invalid, clearing storage');
                 // Token is invalid, clear storage
                 localStorage.removeItem('iroa-auth-token');
                 localStorage.removeItem('iroa-user');
@@ -2348,8 +2367,12 @@
             }
           }
           
-          // Show login modal if not authenticated
+          // Reset auth state and show login modal if not authenticated
+          this.auth.isAuthenticated = false;
+          this.auth.user = null;
+          this.auth.token = null;
           this.showLoginModal = true;
+          console.log('❌ Not authenticated, showing login modal');
           return false;
         },
         
@@ -3878,54 +3901,6 @@
               }
             });
           }
-        }
-      },
-      async mounted() {
-        try {
-          // Initialize Lucide icons first
-          if (typeof lucide !== 'undefined') {
-            lucide.createIcons();
-          }
-          
-          // Sequence async operations to prevent race conditions
-          await this.checkApiConnection();
-          
-          // Load system information for dynamic OS detection
-          await this.loadSystemInfo();
-          
-          // Load saved integration configurations
-          await this.loadSavedIntegrations();
-          
-          // Load VMs after system info is available
-          await this.loadUnderutilizedVMs();
-          
-          // Initialize charts after DOM is stable
-          this.$nextTick(() => {
-            setTimeout(() => {
-              this.initializeCharts();
-              // Re-initialize icons after DOM updates
-              if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-              }
-            }, 200);
-          });
-
-          // Get initial system stats (non-blocking)
-          this.getMacStats().catch(err => {
-            console.warn('Failed to load Mac stats:', err);
-          });
-          
-          // Set up periodic endpoint status checking
-          await this.checkAllEndpoints();
-          setInterval(() => {
-            this.checkAllEndpoints().catch(err => {
-              console.warn('Endpoint status check failed:', err);
-            });
-          }, 30000);
-          
-        } catch (error) {
-          console.error('Error during component mounting:', error);
-          this.showNotification('Failed to initialize dashboard', 'error');
         }
       },
       
