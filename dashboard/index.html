@@ -1861,7 +1861,7 @@
             <div v-if="loginError" class="bg-red-50 border border-red-200 rounded-lg p-3">
               <div class="flex items-center">
                 <i data-lucide="alert-circle" class="w-4 h-4 text-red-500 mr-2"></i>
-                <span class="text-red-700 text-sm">{{ loginError }}</span>
+                <span class="text-red-700 text-sm" v-text="loginError"></span>
               </div>
             </div>
             
@@ -1881,7 +1881,7 @@
               >
                 <div v-if="loading.login" class="loading-spinner mr-2"></div>
                 <i v-else data-lucide="log-in" class="w-4 h-4 mr-2"></i>
-                {{ loading.login ? 'Signing in...' : 'Sign In' }}
+                <span v-text="loading.login ? 'Signing in...' : 'Sign In'"></span>
               </button>
             </div>
           </form>
