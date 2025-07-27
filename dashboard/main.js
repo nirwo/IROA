@@ -3740,15 +3740,17 @@ const app = createApp({
         if (response.ok) {
           const result = await response.json();
           
-          // Store inventory data for infrastructure platforms
+          // Store inventory data for infrastructure platforms and show real progress
           if (type === 'vcenter' && result.inventory) {
             this.storeVCenterInventory(result.inventory);
+            this.showRealSyncProgress(type, result);
           } else if (type === 'hyperv' && result.inventory) {
             this.storeHyperVInventory(result.inventory);
+            this.showRealSyncProgress(type, result);
+          } else {
+            // Fallback to simulation for other types
+            this.simulateSyncProgress(type);
           }
-          
-          // Start progress tracking (simulate since backend doesn't have status endpoint)
-          this.simulateSyncProgress(type);
           
           console.log(`${type} sync started:`, result);
         } else {
@@ -3882,6 +3884,49 @@ const app = createApp({
       
       console.log(`Auto-sync enabled for ${type} (every ${syncStatus.syncInterval} seconds)`);
     },
+
+    showRealSyncProgress(type, syncResult) {
+      // Show real sync progress based on actual inventory data returned from backend
+      const syncStatus = this.adminData.syncStatus[type];
+      
+      // Extract real counts from sync result
+      const actualCounts = {
+        datacenters: syncResult.datacenters || 0,
+        clusters: syncResult.clusters || 0,
+        hosts: syncResult.hosts || 0,
+        datastores: syncResult.datastores || 0,
+        networks: syncResult.networks || 0,
+        vms: syncResult.vm_count || 0
+      };
+      
+      // Calculate total items being processed
+      const totalItems = actualCounts.datacenters + actualCounts.clusters + 
+                        actualCounts.hosts + actualCounts.datastores + 
+                        actualCounts.networks + actualCounts.vms;
+      
+      console.log(`🔄 Real sync progress for ${type}: ${totalItems} total items (${actualCounts.vms} VMs, ${actualCounts.hosts} hosts, ${actualCounts.clusters} clusters, ${actualCounts.datastores} datastores, ${actualCounts.networks} networks)`);
+      
+      // Set real totals
+      syncStatus.totalVMs = actualCounts.vms;
+      syncStatus.totalMetrics = totalItems;
+      syncStatus.syncedVMs = actualCounts.vms; // Since sync is complete
+      syncStatus.syncedMetrics = totalItems; // Since sync is complete
+      
+      // Animate progress to 100% over 3 seconds to show the actual work being done
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 10;
+        syncStatus.syncProgress = Math.min(progress, 100);
+        
+        if (progress >= 100) {
+          clearInterval(progressInterval);
+          syncStatus.syncing = false;
+          syncStatus.lastSync = new Date().toISOString();
+          
+          console.log(`✅ ${type} sync completed: ${totalItems} items processed`);
+        }
+      }, 300); // 300ms * 10 = 3 seconds total
+    },
     
     stopAutoSync(type) {
       const syncStatus = this.adminData.syncStatus[type];
@@ -4012,12 +4057,12 @@ const app = createApp({
         if (inventory.vms && Array.isArray(inventory.vms)) {
           this.vcenterInventory.vms = inventory.vms.map(vm => ({
             id: vm.moid || vm.vm_id,
-            name: vm.name,
-            status: vm.power_state === 'poweredOn' ? 'running' : 'stopped',
-            cpu: vm.cpu_usage_percent || 0,
-            memory_usage: vm.memory_usage_percent || 0,
-            cores: vm.cpu_cores || 1,
-            memory: vm.memory_gb || 1,
+            name: vm.vm,  // Backend sends VM name in 'vm' field
+            status: vm.status || (vm.power_state === 'poweredOn' ? 'running' : 'stopped'),
+            cpu: Math.round(vm.cpu || 0),  // Round CPU percentage
+            memory_usage: Math.round(vm.memory_usage || 0),  // Round memory percentage
+            cores: Math.round(vm.cores || 1),  // Round CPU cores
+            memory: Math.round(vm.memory || 1),  // Round memory in GB
             cluster: vm.cluster || 'Unknown',
             host: vm.host || 'Unknown',
             datacenter: vm.datacenter || 'Unknown',
@@ -4086,10 +4131,10 @@ const app = createApp({
             id: vm.uuid || vm.vm_id,
             name: vm.vm,
             status: vm.status,
-            cpu: vm.cpu || 0,
-            memory_usage: vm.memory_usage || 0,
-            cores: vm.cores || 1,
-            memory: vm.memory || 1,
+            cpu: Math.round(vm.cpu || 0),  // Round CPU percentage
+            memory_usage: Math.round(vm.memory_usage || 0),  // Round memory percentage
+            cores: Math.round(vm.cores || 1),  // Round CPU cores
+            memory: Math.round(vm.memory || 1),  // Round memory in GB
             cluster: vm.cluster || 'Unknown',
             host: vm.host || 'Unknown',
             datacenter: vm.datacenter || 'HyperV-Infrastructure',
@@ -4176,10 +4221,13 @@ const app = createApp({
     },
 
     async loadPersistedInventory() {
-      // Load persisted infrastructure inventory from database on startup
-      console.log('🔄 Loading persisted infrastructure inventory...');
+      // Load persisted infrastructure inventory and connection settings from database on startup
+      console.log('🔄 Loading persisted infrastructure inventory and connection settings...');
       
       try {
+        // Load connection settings first
+        await this.loadConnectionSettings();
+        
         // Load vCenter inventory from database
         await this.loadPersistedVCenterInventory();
         
@@ -4188,6 +4236,63 @@ const app = createApp({
         
       } catch (error) {
         console.error('❌ Error loading persisted inventory:', error);
+      }
+    },
+
+    async loadConnectionSettings() {
+      // Load saved connection settings from backend
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/admin/integrations/config`, {
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const config = await response.json();
+          
+          // Restore vCenter connection settings
+          if (config.vcenter) {
+            this.adminData.connectionForms.vcenter.host = config.vcenter.host || '';
+            this.adminData.connectionForms.vcenter.username = config.vcenter.username || '';
+            // Don't restore password for security, but mark as connected if last connection was recent
+            if (config.vcenter.last_connected) {
+              const lastConnected = new Date(config.vcenter.last_connected);
+              const now = new Date();
+              const hoursSinceConnection = (now - lastConnected) / (1000 * 60 * 60);
+              
+              if (hoursSinceConnection < 24) { // Consider connected if within 24 hours
+                this.adminData.syncStatus.vcenter.connected = true;
+                this.adminData.syncStatus.vcenter.lastSync = config.vcenter.last_sync;
+              }
+            }
+            console.log('✅ Restored vCenter connection settings');
+          }
+          
+          // Restore HyperV connection settings
+          if (config.hyperv) {
+            this.adminData.connectionForms.hyperv.host = config.hyperv.host || '';
+            this.adminData.connectionForms.hyperv.username = config.hyperv.username || '';
+            // Don't restore password for security, but mark as connected if last connection was recent
+            if (config.hyperv.last_connected) {
+              const lastConnected = new Date(config.hyperv.last_connected);
+              const now = new Date();
+              const hoursSinceConnection = (now - lastConnected) / (1000 * 60 * 60);
+              
+              if (hoursSinceConnection < 24) { // Consider connected if within 24 hours
+                this.adminData.syncStatus.hyperv.connected = true;
+                this.adminData.syncStatus.hyperv.lastSync = config.hyperv.last_sync;
+              }
+            }
+            console.log('✅ Restored HyperV connection settings');
+          }
+          
+        } else {
+          console.warn('Failed to load connection settings:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Error loading connection settings:', error);
       }
     },
 
@@ -4254,11 +4359,11 @@ const app = createApp({
         const runningVMs = vms.filter(vm => vm.status === 'running').length;
         const totalVMs = vms.length;
         
-        // Calculate average CPU and memory usage
-        const avgCpu = vms.length > 0 ? Math.round(vms.reduce((sum, vm) => sum + vm.cpu, 0) / vms.length) : 0;
-        const avgMemory = vms.length > 0 ? Math.round(vms.reduce((sum, vm) => sum + vm.memory_usage, 0) / vms.length) : 0;
+        // Calculate average CPU and memory usage (ensure proper field access)
+        const avgCpu = vms.length > 0 ? vms.reduce((sum, vm) => sum + (vm.cpu || 0), 0) / vms.length : 0;
+        const avgMemory = vms.length > 0 ? vms.reduce((sum, vm) => sum + (vm.memory_usage || 0), 0) / vms.length : 0;
         
-        // Update stats object with real data
+        // Update stats object with real data (rounded values only)
         this.stats = [
           {
             title: 'Active VMs',
@@ -4270,7 +4375,7 @@ const app = createApp({
           },
           {
             title: 'Avg CPU Usage',
-            value: `${avgCpu}%`,
+            value: `${Math.round(avgCpu)}%`,
             subtitle: 'Across all VMs',
             icon: 'cpu',
             color: 'text-green-600',
@@ -4278,7 +4383,7 @@ const app = createApp({
           },
           {
             title: 'Avg Memory',
-            value: `${avgMemory}%`,
+            value: `${Math.round(avgMemory)}%`,
             subtitle: 'Memory utilization',
             icon: 'memory-stick',
             color: 'text-purple-600',

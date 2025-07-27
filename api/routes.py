@@ -827,6 +827,26 @@ async def get_vcenter_vms():
         raise HTTPException(status_code=500, detail=f"Failed to fetch vCenter VMs: {str(e)}")
 
 
+@router.get("/admin/integrations/config")
+async def get_integrations_config():
+    """Get saved integration configurations (without passwords)"""
+    try:
+        config = load_integration_config()
+        
+        # Remove passwords for security
+        safe_config = {}
+        for integration, settings in config.items():
+            if isinstance(settings, dict):
+                safe_settings = {k: v for k, v in settings.items() if k != 'password'}
+                safe_config[integration] = safe_settings
+            else:
+                safe_config[integration] = settings
+        
+        return safe_config
+    except Exception as e:
+        print(f"❌ Error getting integration config: {e}")
+        return {}
+
 @router.get("/vcenter/inventory")
 async def get_vcenter_inventory():
     """Get cached vCenter inventory (datacenters, clusters, hosts)"""
