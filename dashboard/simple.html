@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>IROA - Intelligent Resource Optimization Agent</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card-hover { transition: all 0.2s ease-in-out; }
+    .card-hover:hover { transform: translateY(-2px); }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Login Screen -->
+    <div v-if="!isAuthenticated" class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+      <!-- Header -->
+      <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+          <div class="flex items-center justify-center">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                <i data-lucide="brain-circuit" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold">IROA</h1>
+                <p class="text-sm opacity-90">Intelligent Resource Optimization Agent</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Login Content -->
+      <main class="flex-1 flex items-center justify-center px-6 py-12">
+        <div class="w-full max-w-md">
+          <!-- Login Card -->
+          <div class="bg-white rounded-2xl shadow-xl p-8">
+            <div class="text-center mb-8">
+              <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="shield-check" class="w-10 h-10 text-blue-600"></i>
+              </div>
+              <h2 class="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
+              <p class="text-gray-600">Please sign in to access your dashboard</p>
+            </div>
+            
+            <!-- Debug Info -->
+            <div class="text-xs text-gray-400 text-center mb-6 bg-gray-50 rounded-lg p-2">
+              Status: isAuthenticated = {{ isAuthenticated }}
+            </div>
+        
+        <form @submit.prevent="login" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
+            <input 
+              v-model="loginForm.username" 
+              type="text" 
+              required
+              autocomplete="username"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter your username"
+            >
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input 
+              v-model="loginForm.password" 
+              type="password" 
+              required
+              autocomplete="current-password"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter your password"
+            >
+          </div>
+          <div v-if="loginError" class="text-red-600 text-sm text-center">
+            {{ loginError }}
+          </div>
+          <div class="space-y-3">
+            <button 
+              type="submit" 
+              :disabled="isLoggingIn"
+              class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <span v-if="isLoggingIn">Authenticating...</span>
+              <span v-else>Login</span>
+            </button>
+            
+            <!-- Debug/Skip Button -->
+            <button 
+              type="button" 
+              @click="skipAuth"
+              class="w-full bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors text-sm"
+            >
+              Skip Authentication (Debug)
+            </button>
+          </div>
+        </form>
+            
+            <!-- Credentials Info -->
+            <div class="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-200">
+              <h3 class="text-sm font-semibold text-blue-900 mb-2">Demo Credentials</h3>
+              <div class="text-sm text-blue-700 space-y-1">
+                <div><span class="font-medium">Username:</span> admin</div>
+                <div><span class="font-medium">Password:</span> iroa2024</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2024 IROA - Intelligent Resource Optimization Agent</p>
+      </footer>
+      </div>
+    </div>
+
+    <!-- Dashboard Content -->
+    <div v-if="isAuthenticated" class="min-h-screen bg-gray-50">
+      <!-- Header -->
+      <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                <i data-lucide="brain-circuit" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold">IROA</h1>
+                <p class="text-sm opacity-90">Intelligent Resource Optimization Agent</p>
+              </div>
+            </div>
+            <div class="flex items-center space-x-4">
+              <div class="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded-lg">
+                <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span class="text-sm">System Online</span>
+              </div>
+              <button @click="logout" class="bg-red-500 bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-all">
+                <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="container mx-auto px-6 py-8">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h2 class="text-2xl font-bold text-gray-900 mb-4">🎉 Authentication Successful!</h2>
+          <p class="text-gray-600 mb-4">Welcome to the IROA Dashboard. The authentication system is now working correctly.</p>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-blue-50 p-4 rounded-lg">
+              <h3 class="font-semibold text-blue-900">Session Token</h3>
+              <p class="text-sm text-blue-700">{{ sessionToken ? sessionToken.substring(0, 20) + '...' : 'None' }}</p>
+            </div>
+            <div class="bg-green-50 p-4 rounded-lg">
+              <h3 class="font-semibold text-green-900">Authentication Status</h3>
+              <p class="text-sm text-green-700">{{ isAuthenticated ? 'Authenticated' : 'Not Authenticated' }}</p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-lg">
+              <h3 class="font-semibold text-purple-900">API Status</h3>
+              <p class="text-sm text-purple-700">{{ apiAvailable ? 'Connected' : 'Mock Data Mode' }}</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          isAuthenticated: false,
+          isLoggingIn: false,
+          loginError: '',
+          loginForm: {
+            username: '',
+            password: ''
+          },
+          sessionToken: null,
+          apiAvailable: false
+        };
+      },
+      mounted() {
+        console.log('🚀 Vue app mounted');
+        this.checkExistingSession();
+        
+        // Initialize Lucide icons
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      },
+      methods: {
+        checkExistingSession() {
+          const token = localStorage.getItem('iroa_session_token');
+          const expiry = localStorage.getItem('iroa_session_expiry');
+          
+          console.log('🔍 Checking session - token:', !!token, 'expiry:', expiry);
+          
+          if (token && expiry && new Date().getTime() < parseInt(expiry)) {
+            this.sessionToken = token;
+            this.isAuthenticated = true;
+            console.log('✅ Valid session found, setting isAuthenticated to true');
+          } else {
+            localStorage.removeItem('iroa_session_token');
+            localStorage.removeItem('iroa_session_expiry');
+            console.log('❌ No valid session found');
+          }
+        },
+        
+        async login() {
+          this.isLoggingIn = true;
+          this.loginError = '';
+          
+          try {
+            // Input validation
+            if (!this.loginForm.username || !this.loginForm.password) {
+              this.loginError = 'Username and password are required';
+            } else if (this.loginForm.username.length < 3 || this.loginForm.username.length > 50) {
+              this.loginError = 'Username must be between 3 and 50 characters';
+            } else if (this.loginForm.password.length < 6) {
+              this.loginError = 'Password must be at least 6 characters';
+            } else {
+              // Sanitize input
+              const username = this.loginForm.username.trim().toLowerCase();
+              const password = this.loginForm.password;
+              
+              // For demo purposes, using hardcoded credentials
+              if (username === 'admin' && password === 'iroa2024') {
+                // Generate session token
+                const token = 'iroa_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                const expiry = new Date().getTime() + (24 * 60 * 60 * 1000); // 24 hours
+                
+                // Store session
+                localStorage.setItem('iroa_session_token', token);
+                localStorage.setItem('iroa_session_expiry', expiry.toString());
+                
+                // Set authentication state
+                this.sessionToken = token;
+                this.isAuthenticated = true;
+                
+                console.log('✅ Login successful, isAuthenticated:', this.isAuthenticated);
+                console.log('✅ Session token stored:', token);
+                
+                // Initialize icons after login
+                this.$nextTick(() => {
+                  if (window.lucide) {
+                    window.lucide.createIcons();
+                  }
+                });
+              } else {
+                this.loginError = 'Invalid username or password';
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+          } catch (error) {
+            this.loginError = 'Authentication failed. Please try again.';
+            console.error('Login error:', error);
+          } finally {
+            this.isLoggingIn = false;
+          }
+        },
+        
+        skipAuth() {
+          console.log('🚨 Skipping authentication for debugging');
+          
+          // Generate a debug session token
+          const token = 'debug_' + Date.now();
+          const expiry = new Date().getTime() + (24 * 60 * 60 * 1000); // 24 hours
+          
+          // Store session
+          localStorage.setItem('iroa_session_token', token);
+          localStorage.setItem('iroa_session_expiry', expiry.toString());
+          
+          // Set authentication state
+          this.sessionToken = token;
+          this.isAuthenticated = true;
+          
+          console.log('🚨 Debug auth set - isAuthenticated:', this.isAuthenticated);
+          
+          // Initialize icons
+          this.$nextTick(() => {
+            if (window.lucide) {
+              window.lucide.createIcons();
+            }
+          });
+        },
+        
+        logout() {
+          // Clear session data
+          localStorage.removeItem('iroa_session_token');
+          localStorage.removeItem('iroa_session_expiry');
+          
+          this.isAuthenticated = false;
+          this.sessionToken = null;
+          this.loginForm.username = '';
+          this.loginForm.password = '';
+          this.loginError = '';
+          
+          console.log('👋 Logged out');
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

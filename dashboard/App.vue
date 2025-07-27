@@ -1,8 +1,116 @@
 
 <template>
   <div class="min-h-screen bg-gray-50">
+    <!-- Login Screen -->
+    <div v-if="!isAuthenticated" class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+      <!-- Header -->
+      <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+          <div class="flex items-center justify-center">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                <i data-lucide="brain-circuit" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold">IROA</h1>
+                <p class="text-sm opacity-90">Intelligent Resource Optimization Agent</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Login Content -->
+      <main class="flex-1 flex items-center justify-center px-6 py-12">
+        <div class="w-full max-w-md">
+          <!-- Login Card -->
+          <div class="bg-white rounded-2xl shadow-xl p-8">
+            <div class="text-center mb-8">
+              <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="shield-check" class="w-10 h-10 text-blue-600"></i>
+              </div>
+              <h2 class="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
+              <p class="text-gray-600">Please sign in to access your dashboard</p>
+            </div>
+            
+            <!-- Debug Info -->
+            <div class="text-xs text-gray-400 text-center mb-6 bg-gray-50 rounded-lg p-2">
+              Status: isAuthenticated = {{ isAuthenticated }}
+            </div>
+            
+            <form @submit.prevent="login" class="space-y-6">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Username</label>
+                <input 
+                  v-model="loginForm.username" 
+                  type="text" 
+                  required
+                  maxlength="50"
+                  pattern="[a-zA-Z0-9_-]+"
+                  autocomplete="username"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Enter your username"
+                >
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                <input 
+                  v-model="loginForm.password" 
+                  type="password" 
+                  required
+                  minlength="6"
+                  maxlength="100"
+                  autocomplete="current-password"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Enter your password"
+                >
+              </div>
+              
+              <div v-if="loginError" class="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-xl text-center">
+                {{ loginError }}
+              </div>
+              
+              <div class="space-y-3">
+                <button 
+                  type="submit" 
+                  :disabled="isLoggingIn"
+                  class="w-full bg-blue-600 text-white py-3 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold"
+                >
+                  <span v-if="isLoggingIn">Authenticating...</span>
+                  <span v-else>Sign In</span>
+                </button>
+                
+                <!-- Debug/Skip Button -->
+                <button 
+                  type="button" 
+                  @click="skipAuth"
+                  class="w-full bg-gray-500 text-white py-2 px-4 rounded-xl hover:bg-gray-600 transition-all text-sm"
+                >
+                  Skip Authentication (Debug)
+                </button>
+              </div>
+            </form>
+            
+            <!-- Credentials Info -->
+            <div class="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-200">
+              <h3 class="text-sm font-semibold text-blue-900 mb-2">Demo Credentials</h3>
+              <div class="text-sm text-blue-700 space-y-1">
+                <div><span class="font-medium">Username:</span> admin</div>
+                <div><span class="font-medium">Password:</span> iroa2024</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2024 IROA - Intelligent Resource Optimization Agent</p>
+      </footer>
+    </div>
+
     <!-- Header -->
-    <header class="gradient-bg text-white shadow-lg">
+    <header v-if="isAuthenticated" class="gradient-bg text-white shadow-lg">
       <div class="container mx-auto px-6 py-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-3">
@@ -16,11 +124,18 @@
           </div>
           <div class="flex items-center space-x-4">
             <div class="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded-lg">
-              <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span class="text-sm">System Online</span>
+              <div :class="[
+                'w-2 h-2 rounded-full',
+                apiAvailable ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
+              ]"></div>
+              <span class="text-sm">{{ apiAvailable ? 'API Connected' : 'Mock Data Mode' }}</span>
             </div>
             <button @click="refreshData" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-all">
               <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            </button>
+            <button @click="logout" class="bg-red-500 bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-all">
+              <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>
+              Logout
             </button>
           </div>
         </div>
@@ -28,7 +143,7 @@
     </header>
 
     <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b">
+    <nav v-if="isAuthenticated" class="bg-white shadow-sm border-b">
       <div class="container mx-auto px-6">
         <nav class="flex space-x-1 bg-white rounded-lg p-1 shadow-sm">
           <button 
@@ -50,7 +165,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="container mx-auto px-6 py-8">
+    <main v-if="isAuthenticated" class="container mx-auto px-6 py-8">
       <!-- Overview Tab -->
       <div v-if="activeTab === 'overview'" class="space-y-6">
         <!-- Stats Cards -->
@@ -526,59 +641,67 @@
             <!-- vCenter Integration -->
             <div v-if="adminData.selectedIntegration === 'vcenter'" class="bg-white rounded-xl shadow-sm p-6">
               <h3 class="text-lg font-semibold mb-4">🏢 VMware vCenter Integration</h3>
-              <div class="space-y-4">
+              <form @submit.prevent="testConnection('vcenter')" class="space-y-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">vCenter Host</label>
                   <input v-model="adminData.connectionForms.vcenter.host" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="vcenter.local">
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                  <input v-model="adminData.connectionForms.vcenter.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="administrator@vsphere.local">
+                  <input v-model="adminData.connectionForms.vcenter.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="administrator@vsphere.local" autocomplete="username">
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                  <input v-model="adminData.connectionForms.vcenter.password" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                  <input id="vcenter-password" v-model="adminData.connectionForms.vcenter.password" type="password" placeholder="Enter vCenter password" autocomplete="current-password" spellcheck="false" @input="debugCredentialInput('password', $event)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
-                <button @click="testConnection('vcenter')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                   Test Connection & Ingest
                 </button>
-              </div>
+              </form>
             </div>
             
             <!-- Zabbix Integration -->
             <div v-if="adminData.selectedIntegration === 'zabbix'" class="bg-white rounded-xl shadow-sm p-6">
               <h3 class="text-lg font-semibold mb-4">📊 Zabbix Integration</h3>
-              <div class="space-y-4">
+              <form @submit.prevent="testConnection('zabbix')" class="space-y-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Zabbix API URL</label>
                   <input v-model="adminData.connectionForms.zabbix.url" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="http://zabbix.local/api_jsonrpc.php">
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                  <input v-model="adminData.connectionForms.zabbix.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Admin">
+                  <input v-model="adminData.connectionForms.zabbix.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Admin" autocomplete="username">
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                  <input v-model="adminData.connectionForms.zabbix.password" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                  <input id="zabbix-password" v-model="adminData.connectionForms.zabbix.password" type="password" placeholder="Enter Zabbix password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="current-password">
                 </div>
-                <button @click="testConnection('zabbix')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                   Test Connection & Ingest
                 </button>
-              </div>
+              </form>
             </div>
             
             <!-- Prometheus Integration -->
             <div v-if="adminData.selectedIntegration === 'prometheus'" class="bg-white rounded-xl shadow-sm p-6">
               <h3 class="text-lg font-semibold mb-4">🔥 Prometheus Integration</h3>
-              <div class="space-y-4">
+              <form @submit.prevent="testConnection('prometheus')" class="space-y-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Prometheus URL</label>
                   <input v-model="adminData.connectionForms.prometheus.url" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="http://localhost:9090">
                 </div>
-                <button @click="testConnection('prometheus')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Username (Optional)</label>
+                  <input v-model="adminData.connectionForms.prometheus.username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Leave empty if no authentication" autocomplete="username">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Password (Optional)</label>
+                  <input id="prometheus-password" v-model="adminData.connectionForms.prometheus.password" type="password" placeholder="Leave empty if no authentication" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="current-password">
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                   Test Connection & Ingest
                 </button>
-              </div>
+              </form>
             </div>
           </div>
         </div>
@@ -591,6 +714,17 @@
 export default {
   data() {
     return {
+      isAuthenticated: false,
+      isLoggingIn: false,
+      skipAuth: false,
+      loginError: '',
+      loginForm: {
+        username: '',
+        password: ''
+      },
+      sessionToken: null,
+      apiBaseUrl: '',
+      apiAvailable: false,
       activeTab: 'overview',
       loading: false,
       searchTerm: '',
@@ -640,7 +774,7 @@ export default {
         connectionForms: {
           vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
           zabbix: { url: 'http://zabbix.local/api_jsonrpc.php', username: 'Admin', password: '' },
-          prometheus: { url: 'http://localhost:9090' }
+          prometheus: { url: 'http://localhost:9090', username: '', password: '' }
         }
       }
     }
@@ -668,18 +802,23 @@ export default {
     }
   },
   async mounted() {
-    try {
-      await this.loadData()
-      // Wait for DOM to be ready before initializing charts
-      this.$nextTick(() => {
-        this.initializeCharts()
-      })
-      // Initialize Lucide icons
-      if (window.lucide) {
-        window.lucide.createIcons()
-      }
-    } catch (error) {
-      console.error('Error during component mounting:', error)
+    console.log('🚀 Vue app mounted')
+    
+    // Initialize API base URL
+    this.apiBaseUrl = this.getApiBaseUrl()
+    
+    // Check authentication status
+    await this.checkAuthStatus()
+    
+    // Initialize Lucide icons
+    if (window.lucide) {
+      window.lucide.createIcons()
+    }
+    
+    // If already authenticated, initialize the app
+    if (this.isAuthenticated) {
+      await this.loadInfrastructure()
+      this.initializeAuthenticatedApp()
     }
   },
   beforeUnmount() {
@@ -695,70 +834,358 @@ export default {
     }
   },
   methods: {
+    getApiBaseUrl() {
+      // Check if we're running from file:// protocol
+      if (window.location.protocol === 'file:') {
+        return 'http://localhost:8001'
+      }
+      // For http/https, use relative path or same origin
+      return window.location.origin.includes('localhost') 
+        ? 'http://localhost:8001' 
+        : `${window.location.protocol}//${window.location.hostname}:8001`
+    },
+    
+    checkExistingSession() {
+      const token = localStorage.getItem('iroa_session_token')
+      const expiry = localStorage.getItem('iroa_session_expiry')
+      
+      console.log('🔍 Checking session - token:', !!token, 'expiry:', expiry)
+      
+      if (token && expiry && new Date().getTime() < parseInt(expiry)) {
+        this.sessionToken = token
+        this.isAuthenticated = true
+        console.log('✅ Valid session found, setting isAuthenticated to true')
+      } else {
+        // Clean up expired session
+        localStorage.removeItem('iroa_session_token')
+        localStorage.removeItem('iroa_session_expiry')
+        console.log('❌ No valid session found')
+      }
+    },
+
+    async checkAuthStatus() {
+      this.checkExistingSession()
+      if (this.isAuthenticated) {
+        await this.loadUserPermissions()
+      }
+    },
+
+    async loadUserPermissions() {
+      try {
+        // Mock user permissions loading
+        console.log('Loading user permissions...')
+        // In a real app, this would load user roles/permissions from API
+      } catch (error) {
+        console.error('Error loading user permissions:', error)
+      }
+    },
+
+    async loadInfrastructure() {
+      try {
+        console.log('Loading infrastructure data...')
+        // This would load initial infrastructure data
+        await this.checkApiConnection()
+        await this.loadData()
+      } catch (error) {
+        console.error('Error loading infrastructure:', error)
+      }
+    },
+    
+    async login() {
+      this.isLoggingIn = true
+      this.loginError = ''
+      
+      try {
+        // Input validation
+        if (!this.loginForm.username || !this.loginForm.password) {
+          this.loginError = 'Username and password are required'
+        } else if (this.loginForm.username.length < 3 || this.loginForm.username.length > 50) {
+          this.loginError = 'Username must be between 3 and 50 characters'
+        } else if (this.loginForm.password.length < 6) {
+          this.loginError = 'Password must be at least 6 characters'
+        } else {
+          // Sanitize input
+          const username = this.loginForm.username.trim().toLowerCase()
+          const password = this.loginForm.password
+          
+          // For demo purposes, using hardcoded credentials
+          if (username === 'admin' && password === 'iroa2024') {
+            // Generate session token
+            const token = 'iroa_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+            const expiry = new Date().getTime() + (24 * 60 * 60 * 1000) // 24 hours
+            
+            // Store session
+            localStorage.setItem('iroa_session_token', token)
+            localStorage.setItem('iroa_session_expiry', expiry.toString())
+            
+            // Set authentication state
+            this.sessionToken = token
+            this.isAuthenticated = true
+            
+            console.log('✅ Login successful, isAuthenticated:', this.isAuthenticated)
+            console.log('✅ Session token stored:', token)
+            
+            // Initialize app components after authentication
+            this.initializeAuthenticatedApp()
+          } else {
+            this.loginError = 'Invalid username or password'
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
+      } catch (error) {
+        this.loginError = 'Authentication failed. Please try again.'
+        console.error('Login error:', error)
+      } finally {
+        this.isLoggingIn = false
+      }
+    },
+    
+    logout() {
+      // Clear session data
+      localStorage.removeItem('iroa_session_token')
+      localStorage.removeItem('iroa_session_expiry')
+      
+      this.isAuthenticated = false
+      this.sessionToken = null
+      this.loginForm.username = ''
+      this.loginForm.password = ''
+      this.loginError = ''
+      
+      // Clean up charts
+      if (this.usageChart) {
+        this.usageChart.destroy()
+        this.usageChart = null
+      }
+      if (this.distributionChart) {
+        this.distributionChart.destroy()
+        this.distributionChart = null
+      }
+      if (this.forecastChart) {
+        this.forecastChart.destroy()
+        this.forecastChart = null
+      }
+    },
+    
+    async checkApiConnection() {
+      try {
+        // Validate the API URL first
+        if (!this.apiBaseUrl || this.apiBaseUrl === '') {
+          throw new Error('API base URL not configured')
+        }
+        
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        
+        const response = await fetch(`${this.apiBaseUrl}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        clearTimeout(timeoutId)
+        this.apiAvailable = response.ok
+        if (this.apiAvailable) {
+          console.log('✅ API server is available')
+        }
+      } catch (error) {
+        this.apiAvailable = false
+        console.warn('⚠️ API server unavailable, using mock data:', error.message)
+      }
+    },
+    
+    skipAuth() {
+      console.log('🚨 Skipping authentication for debugging')
+      
+      // Generate a debug session token
+      const token = 'debug_' + Date.now()
+      const expiry = new Date().getTime() + (24 * 60 * 60 * 1000) // 24 hours
+      
+      // Store session
+      localStorage.setItem('iroa_session_token', token)
+      localStorage.setItem('iroa_session_expiry', expiry.toString())
+      
+      // Set authentication state
+      this.sessionToken = token
+      this.isAuthenticated = true
+      
+      console.log('🚨 Debug auth set - isAuthenticated:', this.isAuthenticated)
+      
+      // Initialize app components after authentication
+      this.initializeAuthenticatedApp()
+    },
+    
+    initializeAuthenticatedApp() {
+      console.log('🔧 Initializing authenticated app components')
+      
+      // Use nextTick to ensure DOM is updated after authentication state change
+      this.$nextTick(async () => {
+        try {
+          // Initialize Lucide icons first
+          if (window.lucide) {
+            window.lucide.createIcons()
+          }
+          
+          // Check API connection and load data
+          await this.checkApiConnection()
+          await this.loadData()
+          
+          // Initialize charts after data is loaded
+          this.$nextTick(() => {
+            this.initializeCharts()
+          })
+          
+          console.log('✅ App initialization complete')
+        } catch (error) {
+          console.error('Error initializing authenticated app:', error)
+          // Don't reset authentication on initialization error
+        }
+      })
+    },
+    
     async loadData() {
       this.loading = true
       try {
-        // Load recommendations
-        const recRes = await fetch('http://localhost:8001/recommendations')
-        if (recRes.ok) {
-          this.recommendations = await recRes.json()
+        if (this.apiAvailable) {
+          // Load recommendations from API
+          const recRes = await fetch(`${this.apiBaseUrl}/recommendations`, {
+            headers: {
+              'Authorization': `Bearer ${this.sessionToken}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (recRes.ok) {
+            this.recommendations = await recRes.json()
+          } else {
+            console.warn('Failed to load recommendations:', recRes.status)
+            this.recommendations = this.getMockRecommendations()
+          }
+          
+          // Load underutilized VMs from API
+          const underRes = await fetch(`${this.apiBaseUrl}/underutilized`, {
+            headers: {
+              'Authorization': `Bearer ${this.sessionToken}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (underRes.ok) {
+            this.underutilizedVMs = await underRes.json()
+            // Update stats
+            this.stats[1].value = this.underutilizedVMs.length.toString()
+          } else {
+            console.warn('Failed to load underutilized VMs:', underRes.status)
+            this.underutilizedVMs = this.getMockUnderutilizedVMs()
+            this.stats[1].value = this.underutilizedVMs.length.toString()
+          }
         } else {
-          console.warn('Failed to load recommendations:', recRes.status)
-          this.recommendations = []
-        }
-        
-        // Load underutilized VMs
-        const underRes = await fetch('http://localhost:8001/underutilized')
-        if (underRes.ok) {
-          this.underutilizedVMs = await underRes.json()
-          // Update stats
+          // Use mock data when API is unavailable
+          this.recommendations = this.getMockRecommendations()
+          this.underutilizedVMs = this.getMockUnderutilizedVMs()
           this.stats[1].value = this.underutilizedVMs.length.toString()
-        } else {
-          console.warn('Failed to load underutilized VMs:', underRes.status)
-          this.underutilizedVMs = []
         }
       } catch (error) {
         console.error('Error loading data:', error)
-        // Set default values on error
-        this.recommendations = []
-        this.underutilizedVMs = []
+        // Set mock data on error
+        this.recommendations = this.getMockRecommendations()
+        this.underutilizedVMs = this.getMockUnderutilizedVMs()
+        this.stats[1].value = this.underutilizedVMs.length.toString()
       } finally {
         this.loading = false
       }
     },
+    getMockRecommendations() {
+      return [
+        {
+          vm: 'test-vm-01',
+          reason: 'underutilized',
+          suggestion: 'Consider reducing CPU allocation or consolidating workload',
+          details: { avg_cpu: 5, avg_mem: 17 }
+        },
+        {
+          vm: 'backup-vm-01',
+          reason: 'underutilized',
+          suggestion: 'Schedule-based scaling could optimize resource usage',
+          details: { avg_cpu: 5, avg_mem: 17 }
+        }
+      ]
+    },
+    
+    getMockUnderutilizedVMs() {
+      return this.mockVMs.filter(vm => vm.cpu < 10 && vm.memory_usage < 20)
+    },
+    
     async refreshData() {
+      await this.checkApiConnection()
       await this.loadData()
       this.initializeCharts()
     },
     async getVMForecast(vmId) {
       try {
-        const res = await fetch(`http://localhost:8001/forecast/${vmId}`)
-        if (res.ok) {
-          const data = await res.json()
-          this.forecast = data.cpu_forecast || []
-          this.selectedVM = this.mockVMs.find(vm => vm.id === vmId)
-          this.activeTab = 'analytics'
-          
-          // Update forecast chart
-          this.$nextTick(() => {
-            this.initializeForecastChart()
+        if (this.apiAvailable) {
+          const res = await fetch(`${this.apiBaseUrl}/forecast/${vmId}`, {
+            headers: {
+              'Authorization': `Bearer ${this.sessionToken}`,
+              'Content-Type': 'application/json'
+            }
           })
+          if (res.ok) {
+            const data = await res.json()
+            this.forecast = data.cpu_forecast || []
+          } else {
+            console.warn('Failed to load forecast:', res.status)
+            this.forecast = this.getMockForecast()
+          }
         } else {
-          console.warn('Failed to load forecast:', res.status)
-          this.forecast = []
+          this.forecast = this.getMockForecast()
         }
+        
+        this.selectedVM = this.mockVMs.find(vm => vm.id === vmId)
+        this.activeTab = 'analytics'
+        
+        // Update forecast chart
+        this.$nextTick(() => {
+          this.initializeForecastChart()
+        })
       } catch (error) {
         console.error('Error loading forecast:', error)
-        this.forecast = []
+        this.forecast = this.getMockForecast()
+        this.selectedVM = this.mockVMs.find(vm => vm.id === vmId)
+        this.activeTab = 'analytics'
+        this.$nextTick(() => {
+          this.initializeForecastChart()
+        })
       }
     },
+    getMockForecast() {
+      // Generate mock 24-hour forecast data
+      return Array.from({ length: 24 }, (_, i) => {
+        return Math.round(30 + Math.sin(i * 0.3) * 20 + Math.random() * 10)
+      })
+    },
+    
     async getAnomalies(vmId) {
       try {
-        const res = await fetch(`http://localhost:8001/anomalies/${vmId}`)
-        const data = await res.json()
-        this.anomalies = data.anomalies || []
+        if (this.apiAvailable) {
+          const res = await fetch(`${this.apiBaseUrl}/anomalies/${vmId}`, {
+            headers: {
+              'Authorization': `Bearer ${this.sessionToken}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (res.ok) {
+            const data = await res.json()
+            this.anomalies = data.anomalies || []
+          } else {
+            this.anomalies = []
+          }
+        } else {
+          this.anomalies = []
+        }
       } catch (error) {
         console.error('Error loading anomalies:', error)
+        this.anomalies = []
       }
     },
     viewVMDetails(vm) {
@@ -900,9 +1327,17 @@ export default {
     // Admin panel methods
     async startMacMonitoring() {
       try {
-        const response = await fetch('http://localhost:8001/admin/mac/start', {
+        if (!this.apiAvailable) {
+          alert('⚠️ API server is not available. This feature requires the backend server.')
+          return
+        }
+        
+        const response = await fetch(`${this.apiBaseUrl}/admin/mac/start`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.sessionToken}`
+          },
           body: JSON.stringify({ interval: this.adminData.macMonitoring.interval })
         })
         
@@ -924,8 +1359,16 @@ export default {
     
     async stopMacMonitoring() {
       try {
-        const response = await fetch('http://localhost:8001/admin/mac/stop', {
-          method: 'POST'
+        if (!this.apiAvailable) {
+          alert('⚠️ API server is not available. This feature requires the backend server.')
+          return
+        }
+        
+        const response = await fetch(`${this.apiBaseUrl}/admin/mac/stop`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`
+          }
         })
         
         if (response.ok) {
@@ -941,7 +1384,16 @@ export default {
     
     async getMacStats() {
       try {
-        const response = await fetch('http://localhost:8001/admin/mac/stats')
+        if (!this.apiAvailable) {
+          alert('⚠️ API server is not available. This feature requires the backend server.')
+          return
+        }
+        
+        const response = await fetch(`${this.apiBaseUrl}/admin/mac/stats`, {
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`
+          }
+        })
         
         if (response.ok) {
           const stats = await response.json()
@@ -959,12 +1411,24 @@ export default {
       }
     },
     
+    debugCredentialInput(field, event) {
+      console.log(`Debug: ${field} field updated`, event.target.value ? '[REDACTED]' : 'empty')
+    },
+    
     async testConnection(type) {
       try {
+        if (!this.apiAvailable) {
+          alert('⚠️ API server is not available. This feature requires the backend server.')
+          return
+        }
+        
         const formData = this.adminData.connectionForms[type]
-        const response = await fetch(`http://localhost:8001/admin/${type}/test`, {
+        const response = await fetch(`${this.apiBaseUrl}/admin/${type}/test`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.sessionToken}`
+          },
           body: JSON.stringify(formData)
         })
         
