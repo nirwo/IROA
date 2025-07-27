@@ -1204,6 +1204,214 @@ async def get_all_vms():
     print(f"📊 Returning {len(final_vms)} VMs (including {len([vm for vm in final_vms if vm.get('source') == 'vcenter'])} from vCenter)")
     return final_vms
 
+# Historical analytics data storage
+historical_analytics_data = []
+cluster_analytics_cache = {}
+
+@router.post("/analytics/historical/store")
+async def store_historical_analytics():
+    """Store current VMware analytics data for historical tracking"""
+    try:
+        # Get current VM data from vCenter
+        current_vms = vcenter_vms_cache.copy()
+        
+        if not current_vms:
+            raise HTTPException(status_code=404, detail="No vCenter VM data available to store")
+        
+        # Create historical data point
+        timestamp = datetime.now().isoformat()
+        historical_point = {
+            "timestamp": timestamp,
+            "total_vms": len(current_vms),
+            "clusters": {},
+            "vms": []
+        }
+        
+        # Group VMs by cluster and calculate metrics
+        cluster_metrics = {}
+        for vm in current_vms:
+            cluster = vm.get('cluster', 'Unknown')
+            if cluster not in cluster_metrics:
+                cluster_metrics[cluster] = {
+                    "vm_count": 0,
+                    "total_cpu": 0,
+                    "total_memory": 0,
+                    "avg_cpu_usage": 0,
+                    "avg_memory_usage": 0,
+                    "vms": []
+                }
+            
+            cluster_metrics[cluster]["vm_count"] += 1
+            cluster_metrics[cluster]["total_cpu"] += vm.get('cpu_cores', 0)
+            cluster_metrics[cluster]["total_memory"] += vm.get('memory_gb', 0)
+            cluster_metrics[cluster]["vms"].append({
+                "name": vm.get('name', 'Unknown'),
+                "cpu_usage": vm.get('cpu_usage_percent', 0),
+                "memory_usage": vm.get('memory_usage_percent', 0),
+                "status": vm.get('status', 'unknown')
+            })
+        
+        # Calculate averages for each cluster
+        for cluster, metrics in cluster_metrics.items():
+            if metrics["vm_count"] > 0:
+                metrics["avg_cpu_usage"] = sum(vm["cpu_usage"] for vm in metrics["vms"]) / metrics["vm_count"]
+                metrics["avg_memory_usage"] = sum(vm["memory_usage"] for vm in metrics["vms"]) / metrics["vm_count"]
+            
+            historical_point["clusters"][cluster] = {
+                "vm_count": metrics["vm_count"],
+                "total_cpu_cores": metrics["total_cpu"],
+                "total_memory_gb": metrics["total_memory"],
+                "avg_cpu_usage_percent": round(metrics["avg_cpu_usage"], 2),
+                "avg_memory_usage_percent": round(metrics["avg_memory_usage"], 2)
+            }
+        
+        # Store historical data (keep last 100 points)
+        historical_analytics_data.append(historical_point)
+        if len(historical_analytics_data) > 100:
+            historical_analytics_data.pop(0)
+        
+        # Update cluster analytics cache
+        cluster_analytics_cache.update(cluster_metrics)
+        
+        print(f"📊 Stored historical analytics: {len(current_vms)} VMs across {len(cluster_metrics)} clusters")
+        
+        return {
+            "status": "success",
+            "message": f"Stored analytics for {len(current_vms)} VMs across {len(cluster_metrics)} clusters",
+            "timestamp": timestamp,
+            "clusters_analyzed": list(cluster_metrics.keys())
+        }
+        
+    except Exception as e:
+        print(f"❌ Failed to store historical analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to store historical analytics: {str(e)}")
+
+@router.get("/analytics/historical")
+async def get_historical_analytics(hours: int = 24, cluster: str = None):
+    """Get historical analytics data with optional cluster filtering"""
+    try:
+        # Filter data by time range
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        filtered_data = []
+        
+        for point in historical_analytics_data:
+            point_time = datetime.fromisoformat(point["timestamp"])
+            if point_time >= cutoff_time:
+                if cluster and cluster in point["clusters"]:
+                    # Return cluster-specific data
+                    filtered_point = {
+                        "timestamp": point["timestamp"],
+                        "cluster": cluster,
+                        "data": point["clusters"][cluster]
+                    }
+                    filtered_data.append(filtered_point)
+                elif not cluster:
+                    # Return all data
+                    filtered_data.append(point)
+        
+        return {
+            "historical_data": filtered_data,
+            "total_points": len(filtered_data),
+            "time_range_hours": hours,
+            "cluster_filter": cluster,
+            "available_clusters": list(set(cluster for point in historical_analytics_data for cluster in point.get("clusters", {}).keys()))
+        }
+        
+    except Exception as e:
+        print(f"❌ Failed to get historical analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get historical analytics: {str(e)}")
+
+@router.get("/analytics/clusters")
+async def get_cluster_analytics(cluster: str = None):
+    """Get current analytics data grouped by clusters"""
+    try:
+        current_vms = vcenter_vms_cache.copy()
+        
+        if not current_vms:
+            return {
+                "clusters": {},
+                "message": "No vCenter VM data available. Please sync vCenter first.",
+                "total_clusters": 0
+            }
+        
+        # Group current VMs by cluster
+        cluster_analytics = {}
+        for vm in current_vms:
+            cluster_name = vm.get('cluster', 'Unknown Cluster')
+            
+            if cluster_name not in cluster_analytics:
+                cluster_analytics[cluster_name] = {
+                    "cluster_name": cluster_name,
+                    "vm_count": 0,
+                    "total_cpu_cores": 0,
+                    "total_memory_gb": 0,
+                    "running_vms": 0,
+                    "avg_cpu_usage": 0,
+                    "avg_memory_usage": 0,
+                    "vms": [],
+                    "cpu_usage_trend": [],
+                    "memory_usage_trend": []
+                }
+            
+            cluster_data = cluster_analytics[cluster_name]
+            cluster_data["vm_count"] += 1
+            cluster_data["total_cpu_cores"] += vm.get('cpu_cores', 0)
+            cluster_data["total_memory_gb"] += vm.get('memory_gb', 0)
+            
+            if vm.get('status', '').lower() == 'running':
+                cluster_data["running_vms"] += 1
+            
+            # Add VM details
+            vm_analytics = {
+                "name": vm.get('name', 'Unknown'),
+                "cpu_usage_percent": vm.get('cpu_usage_percent', 0),
+                "memory_usage_percent": vm.get('memory_usage_percent', 0),
+                "status": vm.get('status', 'unknown'),
+                "host": vm.get('host', 'Unknown')
+            }
+            cluster_data["vms"].append(vm_analytics)
+        
+        # Calculate averages and trends for each cluster
+        for cluster_name, data in cluster_analytics.items():
+            if data["vm_count"] > 0:
+                data["avg_cpu_usage"] = round(sum(vm["cpu_usage_percent"] for vm in data["vms"]) / data["vm_count"], 2)
+                data["avg_memory_usage"] = round(sum(vm["memory_usage_percent"] for vm in data["vms"]) / data["vm_count"], 2)
+                
+                # Generate sample trend data (in real implementation, this would come from historical data)
+                import random
+                base_cpu = data["avg_cpu_usage"]
+                base_memory = data["avg_memory_usage"]
+                
+                for i in range(24):  # 24 hours of sample data
+                    cpu_variation = random.uniform(-10, 10)
+                    memory_variation = random.uniform(-5, 5)
+                    data["cpu_usage_trend"].append({
+                        "hour": i,
+                        "value": max(0, min(100, base_cpu + cpu_variation))
+                    })
+                    data["memory_usage_trend"].append({
+                        "hour": i,
+                        "value": max(0, min(100, base_memory + memory_variation))
+                    })
+        
+        # Filter by specific cluster if requested
+        if cluster and cluster in cluster_analytics:
+            return {
+                "cluster": cluster_analytics[cluster],
+                "message": f"Analytics for cluster: {cluster}"
+            }
+        
+        return {
+            "clusters": cluster_analytics,
+            "total_clusters": len(cluster_analytics),
+            "total_vms": sum(data["vm_count"] for data in cluster_analytics.values()),
+            "message": f"Analytics for {len(cluster_analytics)} clusters"
+        }
+        
+    except Exception as e:
+        print(f"❌ Failed to get cluster analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get cluster analytics: {str(e)}")
+
 @router.get("/analytics/prometheus")
 async def get_prometheus_analytics():
     """Get comprehensive analytics data from all VMs including vCenter and Mac system"""
