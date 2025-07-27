@@ -2293,22 +2293,28 @@ async def get_profile_preview(cluster: str = None):
             })
             profile_mapping[profile_key]["current_count"] += 1
         
-        # Calculate cluster capacity (total resources available in this cluster)
-        cluster_total_cpu = sum([vm.get('cores', 0) for vm in cluster_vms if vm.get('status') == 'running'])
-        cluster_total_memory = sum([vm.get('memory', 0) for vm in cluster_vms if vm.get('status') == 'running'])
-        cluster_total_disk = sum([vm.get('disk', vm.get('disk_gb', 100)) for vm in cluster_vms])
+        # Get actual system resources (available cores and free memory)
+        system_cpu_count = psutil.cpu_count()  # Total CPU cores available
+        system_memory_total = psutil.virtual_memory().total / (1024**3)  # Total memory in GB
+        system_memory_available = psutil.virtual_memory().available / (1024**3)  # Available memory in GB
         
-        # Get cluster infrastructure capacity (assume cluster can handle 3x current load with 80% rule)
-        max_cluster_cpu = int(cluster_total_cpu * 3 * 0.8)  # 80% of 3x current capacity
-        max_cluster_memory = int(cluster_total_memory * 3 * 0.8)
-        max_cluster_disk = int(cluster_total_disk * 2 * 0.8)  # More conservative on storage
+        # Calculate cluster resource allocation and usage
+        cluster_allocated_cpu = sum([vm.get('cores', 0) for vm in cluster_vms])  # All VMs (running + stopped)
+        cluster_allocated_memory = sum([vm.get('memory', 0) for vm in cluster_vms])  # All VMs (running + stopped)
+        cluster_allocated_disk = sum([vm.get('disk', vm.get('disk_gb', 100)) for vm in cluster_vms])
         
-        # Calculate remaining capacity
-        remaining_cpu = max_cluster_cpu - cluster_total_cpu
-        remaining_memory = max_cluster_memory - cluster_total_memory
-        remaining_disk = max_cluster_disk - cluster_total_disk
+        # For capacity planning, use actual system resources with 80% safety rule
+        max_cluster_cpu = int(system_cpu_count * 0.8)  # 80% of total CPU cores
+        max_cluster_memory = int(system_memory_total * 0.8)  # 80% of total memory
+        max_cluster_disk = int(cluster_allocated_disk * 2 * 0.8)  # Conservative storage expansion
         
-        print(f"🔧 Cluster Capacity: CPU {cluster_total_cpu}/{max_cluster_cpu}, Memory {cluster_total_memory}/{max_cluster_memory}GB, Disk {cluster_total_disk}/{max_cluster_disk}GB")
+        # Calculate remaining capacity based on available resources
+        remaining_cpu = max_cluster_cpu - cluster_allocated_cpu
+        remaining_memory = max_cluster_memory - cluster_allocated_memory
+        remaining_disk = max_cluster_disk - cluster_allocated_disk
+        
+        print(f"🔧 Cluster Capacity: CPU {cluster_allocated_cpu}/{max_cluster_cpu}, Memory {cluster_allocated_memory}/{max_cluster_memory}GB, Disk {cluster_allocated_disk}/{max_cluster_disk}GB")
+        print(f"💾 System Resources: {system_cpu_count} cores total, {system_memory_available:.1f}GB available memory")
         
         # Calculate how many more VMs of each discovered profile can be created
         profile_analysis = []
@@ -2365,18 +2371,21 @@ async def get_profile_preview(cluster: str = None):
         return {
             "cluster_name": cluster or "All Clusters",
             "cluster_capacity": {
-                "total_cpu_cores": max_cluster_cpu,
-                "total_memory_gb": max_cluster_memory,
+                "total_cpu_cores": system_cpu_count,
+                "total_memory_gb": round(system_memory_total, 1),
                 "total_disk_gb": max_cluster_disk,
-                "current_cpu_used": cluster_total_cpu,
-                "current_memory_used": cluster_total_memory,
-                "current_disk_used": cluster_total_disk,
+                "max_cpu_capacity_80_percent": max_cluster_cpu,
+                "max_memory_capacity_80_percent": max_cluster_memory,
+                "current_cpu_allocated": cluster_allocated_cpu,
+                "current_memory_allocated": round(cluster_allocated_memory, 1),
+                "current_disk_allocated": cluster_allocated_disk,
+                "available_memory_gb": round(system_memory_available, 1),
                 "remaining_cpu": remaining_cpu,
                 "remaining_memory": remaining_memory,
                 "remaining_disk": remaining_disk,
-                "cpu_utilization_percent": round((cluster_total_cpu / max_cluster_cpu) * 100, 1) if max_cluster_cpu > 0 else 0,
-                "memory_utilization_percent": round((cluster_total_memory / max_cluster_memory) * 100, 1) if max_cluster_memory > 0 else 0,
-                "disk_utilization_percent": round((cluster_total_disk / max_cluster_disk) * 100, 1) if max_cluster_disk > 0 else 0
+                "cpu_allocation_percent": round((cluster_allocated_cpu / max_cluster_cpu) * 100, 1) if max_cluster_cpu > 0 else 0,
+                "memory_allocation_percent": round((cluster_allocated_memory / max_cluster_memory) * 100, 1) if max_cluster_memory > 0 else 0,
+                "disk_allocation_percent": round((cluster_allocated_disk / max_cluster_disk) * 100, 1) if max_cluster_disk > 0 else 0
             },
             "profiles_discovered": profile_analysis,
             "total_profiles_found": len(profile_analysis),
