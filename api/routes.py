@@ -1,6 +1,16 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from datetime import timedelta
+
+# Import authentication modules
+from .auth import (
+    User, UserCreate, UserLogin, Token, UserRole,
+    authenticate_user, create_user, create_access_token,
+    get_current_user, get_current_active_user, require_admin,
+    get_current_user_optional, get_user_permissions,
+    check_admin_access, ACCESS_TOKEN_EXPIRE_MINUTES
+)
 # from recommendation.engine import generate_recommendations  # Temporarily disabled for Docker startup
 # from analysis.engine import get_underutilized_vms  # Temporarily disabled for Docker startup
 # from ml.forecast import forecast_cpu  # Temporarily disabled for Docker startup
@@ -16,6 +26,116 @@ import json
 import os
 
 router = APIRouter()
+
+# ================================
+# AUTHENTICATION ENDPOINTS
+# ================================
+
+@router.post("/auth/login", response_model=Token)
+async def login(user_credentials: UserLogin):
+    """Authenticate user and return JWT token"""
+    user = authenticate_user(user_credentials.username, user_credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role},
+        expires_delta=access_token_expires
+    )
+    
+    # Return user info without password
+    user_info = User(
+        username=user.username,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        last_login=datetime.now()
+    )
+    
+    print(f"🔐 User '{user.username}' logged in successfully (role: {user.role})")
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "user": user_info
+    }
+
+@router.post("/auth/logout")
+async def logout(current_user: User = Depends(get_current_active_user)):
+    """Logout user (client should remove token)"""
+    print(f"🔐 User '{current_user.username}' logged out")
+    return {"message": "Successfully logged out"}
+
+@router.get("/auth/me", response_model=User)
+async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+    """Get current user information"""
+    return current_user
+
+@router.get("/auth/permissions")
+async def get_user_permissions_endpoint(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Get user permissions for frontend role-based access control"""
+    permissions = get_user_permissions(current_user)
+    return {
+        "user": current_user,
+        "permissions": permissions,
+        "is_authenticated": current_user is not None,
+        "is_admin": check_admin_access(current_user)
+    }
+
+@router.post("/auth/users", response_model=User)
+async def create_new_user(user_data: UserCreate, current_user: User = Depends(require_admin)):
+    """Create new user (admin only)"""
+    try:
+        new_user = create_user(user_data)
+        print(f"🔐 Admin '{current_user.username}' created new user '{new_user.username}' with role '{new_user.role}'")
+        
+        # Return user info without password
+        return User(
+            username=new_user.username,
+            email=new_user.email,
+            role=new_user.role,
+            is_active=new_user.is_active,
+            created_at=new_user.created_at
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
+        )
+
+@router.get("/auth/users")
+async def list_users(current_user: User = Depends(require_admin)):
+    """List all users (admin only)"""
+    from .auth import users_db
+    
+    users_list = []
+    for username, user_data in users_db.items():
+        users_list.append({
+            "username": user_data.username,
+            "email": user_data.email,
+            "role": user_data.role,
+            "is_active": user_data.is_active,
+            "created_at": user_data.created_at,
+            "last_login": user_data.last_login
+        })
+    
+    return {
+        "users": users_list,
+        "total_users": len(users_list)
+    }
+
+# ================================
+# BUSINESS LOGIC ENDPOINTS
+# ================================
 
 @router.get("/recommendations")
 def list_recommendations():
