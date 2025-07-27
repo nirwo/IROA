@@ -401,8 +401,9 @@ async def sync_vcenter_vms():
         
         host = vcenter_config.get('host')
         username = vcenter_config.get('username')
+        password = vcenter_config.get('password')
         
-        if not host or not username:
+        if not host or not username or not password:
             raise HTTPException(status_code=400, detail="Incomplete vCenter configuration. Please reconfigure vCenter connection.")
         
         print(f"🏢 Connecting to vCenter: {host}")
@@ -415,20 +416,9 @@ async def sync_vcenter_vms():
         except ImportError:
             raise HTTPException(status_code=500, detail="vCenter SDK (pyVmomi) not available. Cannot sync VM data.")
         
-        # Note: In production, you'd retrieve password from secure storage
-        # For now, we'll return instructions for manual sync
-        return {
-            "status": "info",
-            "message": "vCenter VM sync requires re-entering credentials for security",
-            "instructions": [
-                "1. Go to Administration tab",
-                "2. Select VMware vCenter", 
-                "3. Re-enter your vCenter credentials",
-                "4. Click 'Sync VMs' button that will appear after successful connection"
-            ],
-            "host": host,
-            "username": username
-        }
+        # Use saved credentials for automatic sync
+        request_obj = type('obj', (object,), {'host': host, 'username': username, 'password': password})
+        return await sync_vcenter_inventory_with_credentials(request_obj)
         
     except Exception as e:
         print(f"❌ vCenter sync failed: {str(e)}")
@@ -761,6 +751,17 @@ async def sync_vcenter_inventory_with_credentials(request: ConnectionTestRequest
         }
         
         Disconnect(si)
+        
+        # Save persistent configuration with credentials for continuous updates
+        config = load_integration_config()
+        config['vcenter'] = {
+            'host': request.host,
+            'username': request.username,
+            'password': request.password,  # In production, encrypt this
+            'last_connected': datetime.now().isoformat(),
+            'last_sync': datetime.now().isoformat()
+        }
+        save_integration_config(config)
         
         print(f"✅ Successfully synced complete vCenter inventory:")
         print(f"   📍 {len(datacenters)} datacenters")
