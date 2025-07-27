@@ -1655,7 +1655,7 @@
                 <div>
                   <h4 class="text-lg font-semibold text-gray-900 mb-4">Usage Timeline</h4>
                   <div class="space-y-3">
-                    <div v-for="(point, index) in (historicalAnalytics || []).slice(-10)" :key="`history-${index}-${point.timestamp}`" 
+                    <div v-for="(point, index) in (historicalAnalytics || []).slice(-10)" :key="`history-${index}-${point ? point.timestamp || index : index}`" 
                          class="flex justify-between items-center py-2 border-b border-gray-100"
                          v-if="point && point.timestamp">
                       <div>
