@@ -2235,104 +2235,158 @@ async def get_vm_profiles():
 
 
 @router.get("/profiles/preview")
-async def get_profile_preview():
-    """Get profile preview with capacity analysis using 80% rule"""
+async def get_profile_preview(cluster: str = None):
+    """Enhanced profile preview that parses all VMs in cluster, builds profile mapping by sizing, and calculates capacity based on available cores, memory, and storage"""
     try:
-        # Get system resources
-        cpu_count = psutil.cpu_count()
-        memory_total = psutil.virtual_memory().total / (1024**3)  # GB
-        
-        # Count actual VMs from vCenter cache and categorize by profile types
-        actual_vms = vcenter_vms_cache + [{
+        # Get all VMs from vCenter and system
+        all_vms = vcenter_vms_cache + [{
             "vm": "localhost",
-            "cores": cpu_count,
-            "memory": memory_total,
+            "cores": psutil.cpu_count(),
+            "memory": psutil.virtual_memory().total / (1024**3),
+            "disk": 500,  # Assume 500GB for localhost
+            "cluster": "Local-System",
+            "status": "running",
             "source": "system"
         }]
         
-        print(f"📊 Profile Preview: Analyzing {len(actual_vms)} actual VMs ({len(vcenter_vms_cache)} from vCenter + 1 system)")
+        # Filter VMs by cluster if specified
+        if cluster:
+            cluster_vms = [vm for vm in all_vms if vm.get('cluster', 'Unknown') == cluster]
+            print(f"📊 Profile Preview: Analyzing {len(cluster_vms)} VMs in cluster '{cluster}'")
+        else:
+            cluster_vms = all_vms
+            print(f"📊 Profile Preview: Analyzing {len(cluster_vms)} VMs across all clusters")
         
-        # Update vm_profiles with actual VM counts
-        for profile in vm_profiles:
-            # Count VMs that match this profile's resource requirements
-            matching_vms = 0
-            for vm in actual_vms:
-                vm_cores = vm.get('cores', 0)
-                vm_memory = vm.get('memory', 0)
-                # Match VMs to profiles based on resource requirements (with some tolerance)
-                if (abs(vm_cores - profile["cpu_cores"]) <= 1 and 
-                    abs(vm_memory - profile["memory_gb"]) <= 2):
-                    matching_vms += 1
-            profile["current_count"] = matching_vms
+        if not cluster_vms:
+            return {
+                "error": f"No VMs found in cluster '{cluster}'",
+                "cluster_name": cluster,
+                "profiles_discovered": [],
+                "cluster_capacity": {},
+                "analysis_timestamp": datetime.now().isoformat()
+            }
         
-        # Calculate current resource usage from actual VMs
-        total_cpu_used = sum([vm.get('cores', 0) for vm in actual_vms])
-        total_memory_used = sum([vm.get('memory', 0) for vm in actual_vms])
+        # Parse VMs and build profile mapping by sizing
+        profile_mapping = {}
+        for vm in cluster_vms:
+            vm_cores = int(vm.get('cores', 0))
+            vm_memory = int(vm.get('memory', 0))
+            vm_disk = int(vm.get('disk', vm.get('disk_gb', 100)))  # Default 100GB if not specified
+            
+            # Create profile key based on sizing (cores-memory-disk)
+            profile_key = f"{vm_cores}c-{vm_memory}g-{vm_disk}d"
+            
+            if profile_key not in profile_mapping:
+                profile_mapping[profile_key] = {
+                    "profile_name": f"{vm_cores} Core, {vm_memory}GB RAM, {vm_disk}GB Disk",
+                    "cpu_cores": vm_cores,
+                    "memory_gb": vm_memory,
+                    "disk_gb": vm_disk,
+                    "vms": [],
+                    "current_count": 0
+                }
+            
+            profile_mapping[profile_key]["vms"].append({
+                "name": vm.get('vm', 'Unknown'),
+                "status": vm.get('status', 'unknown'),
+                "cluster": vm.get('cluster', 'Unknown')
+            })
+            profile_mapping[profile_key]["current_count"] += 1
         
-        # Apply 80% capacity rule
-        max_cpu_capacity = int(cpu_count * 0.8)
-        max_memory_capacity = int(memory_total * 0.8)
+        # Calculate cluster capacity (total resources available in this cluster)
+        cluster_total_cpu = sum([vm.get('cores', 0) for vm in cluster_vms if vm.get('status') == 'running'])
+        cluster_total_memory = sum([vm.get('memory', 0) for vm in cluster_vms if vm.get('status') == 'running'])
+        cluster_total_disk = sum([vm.get('disk', vm.get('disk_gb', 100)) for vm in cluster_vms])
+        
+        # Get cluster infrastructure capacity (assume cluster can handle 3x current load with 80% rule)
+        max_cluster_cpu = int(cluster_total_cpu * 3 * 0.8)  # 80% of 3x current capacity
+        max_cluster_memory = int(cluster_total_memory * 3 * 0.8)
+        max_cluster_disk = int(cluster_total_disk * 2 * 0.8)  # More conservative on storage
         
         # Calculate remaining capacity
-        remaining_cpu = max_cpu_capacity - total_cpu_used
-        remaining_memory = max_memory_capacity - total_memory_used
+        remaining_cpu = max_cluster_cpu - cluster_total_cpu
+        remaining_memory = max_cluster_memory - cluster_total_memory
+        remaining_disk = max_cluster_disk - cluster_total_disk
         
-        # Calculate how many more VMs can be created per profile
+        print(f"🔧 Cluster Capacity: CPU {cluster_total_cpu}/{max_cluster_cpu}, Memory {cluster_total_memory}/{max_cluster_memory}GB, Disk {cluster_total_disk}/{max_cluster_disk}GB")
+        
+        # Calculate how many more VMs of each discovered profile can be created
         profile_analysis = []
-        for profile in vm_profiles:
-            # Check license availability
-            license_check = await check_license_availability(profile["license_type"], 1)
+        for profile_key, profile_data in profile_mapping.items():
+            cpu_per_vm = profile_data["cpu_cores"]
+            memory_per_vm = profile_data["memory_gb"]
+            disk_per_vm = profile_data["disk_gb"]
             
-            # Calculate max additional VMs based on resources
-            max_by_cpu = remaining_cpu // profile["cpu_cores"] if profile["cpu_cores"] > 0 else 0
-            max_by_memory = remaining_memory // profile["memory_gb"] if profile["memory_gb"] > 0 else 0
-            max_by_license = license_check["available_count"] if license_check["available"] else 0
+            # Calculate max additional VMs based on available resources
+            max_by_cpu = remaining_cpu // cpu_per_vm if cpu_per_vm > 0 else 0
+            max_by_memory = remaining_memory // memory_per_vm if memory_per_vm > 0 else 0
+            max_by_disk = remaining_disk // disk_per_vm if disk_per_vm > 0 else 0
             
             # The limiting factor determines max additional VMs
-            max_additional = min(max_by_cpu, max_by_memory, max_by_license)
+            max_additional = min(max_by_cpu, max_by_memory, max_by_disk)
+            
+            # Determine limiting factor
+            if max_by_cpu <= max_by_memory and max_by_cpu <= max_by_disk:
+                limiting_factor = "CPU"
+            elif max_by_memory <= max_by_disk:
+                limiting_factor = "Memory"
+            else:
+                limiting_factor = "Storage"
             
             # Calculate resource utilization for this profile
-            profile_cpu_usage = (profile["cpu_cores"] * profile["current_count"]) / max_cpu_capacity * 100
-            profile_memory_usage = (profile["memory_gb"] * profile["current_count"]) / max_memory_capacity * 100
+            profile_cpu_usage = (cpu_per_vm * profile_data["current_count"]) / max_cluster_cpu * 100 if max_cluster_cpu > 0 else 0
+            profile_memory_usage = (memory_per_vm * profile_data["current_count"]) / max_cluster_memory * 100 if max_cluster_memory > 0 else 0
+            profile_disk_usage = (disk_per_vm * profile_data["current_count"]) / max_cluster_disk * 100 if max_cluster_disk > 0 else 0
             
             profile_analysis.append({
-                "profile_id": profile["id"],
-                "profile_name": profile["name"],
-                "current_count": profile["current_count"],
+                "profile_key": profile_key,
+                "profile_name": profile_data["profile_name"],
+                "current_count": profile_data["current_count"],
                 "max_additional": max(0, max_additional),
-                "max_total_possible": profile["current_count"] + max(0, max_additional),
-                "cpu_per_vm": profile["cpu_cores"],
-                "memory_per_vm": profile["memory_gb"],
-                "disk_per_vm": profile["disk_gb"],
-                "license_type": profile["license_type"],
-                "license_available": license_check["available"],
-                "license_count_available": license_check["available_count"],
-                "limiting_factor": "CPU" if max_by_cpu <= max_by_memory and max_by_cpu <= max_by_license else "Memory" if max_by_memory <= max_by_license else "License",
+                "max_total_possible": profile_data["current_count"] + max(0, max_additional),
+                "cpu_per_vm": cpu_per_vm,
+                "memory_per_vm": memory_per_vm,
+                "disk_per_vm": disk_per_vm,
+                "limiting_factor": limiting_factor,
                 "profile_cpu_usage_percent": round(profile_cpu_usage, 1),
-                "profile_memory_usage_percent": round(profile_memory_usage, 1)
+                "profile_memory_usage_percent": round(profile_memory_usage, 1),
+                "profile_disk_usage_percent": round(profile_disk_usage, 1),
+                "vms_in_profile": profile_data["vms"],
+                "capacity_breakdown": {
+                    "max_by_cpu": max_by_cpu,
+                    "max_by_memory": max_by_memory,
+                    "max_by_disk": max_by_disk
+                }
             })
         
+        # Sort profiles by current count (most used first)
+        profile_analysis.sort(key=lambda x: x["current_count"], reverse=True)
+        
         return {
-            "system_capacity": {
-                "total_cpu_cores": cpu_count,
-                "total_memory_gb": round(memory_total, 1),
-                "max_cpu_capacity_80_percent": max_cpu_capacity,
-                "max_memory_capacity_80_percent": max_memory_capacity,
-                "current_cpu_used": total_cpu_used,
-                "current_memory_used": total_memory_used,
+            "cluster_name": cluster or "All Clusters",
+            "cluster_capacity": {
+                "total_cpu_cores": max_cluster_cpu,
+                "total_memory_gb": max_cluster_memory,
+                "total_disk_gb": max_cluster_disk,
+                "current_cpu_used": cluster_total_cpu,
+                "current_memory_used": cluster_total_memory,
+                "current_disk_used": cluster_total_disk,
                 "remaining_cpu": remaining_cpu,
                 "remaining_memory": remaining_memory,
-                "cpu_utilization_percent": round((total_cpu_used / max_cpu_capacity) * 100, 1),
-                "memory_utilization_percent": round((total_memory_used / max_memory_capacity) * 100, 1)
+                "remaining_disk": remaining_disk,
+                "cpu_utilization_percent": round((cluster_total_cpu / max_cluster_cpu) * 100, 1) if max_cluster_cpu > 0 else 0,
+                "memory_utilization_percent": round((cluster_total_memory / max_cluster_memory) * 100, 1) if max_cluster_memory > 0 else 0,
+                "disk_utilization_percent": round((cluster_total_disk / max_cluster_disk) * 100, 1) if max_cluster_disk > 0 else 0
             },
-            "profile_analysis": profile_analysis,
-            "total_current_vms": sum([p["current_count"] for p in vm_profiles]),
+            "profiles_discovered": profile_analysis,
+            "total_profiles_found": len(profile_analysis),
+            "total_current_vms": sum([p["current_count"] for p in profile_analysis]),
             "total_max_additional_vms": sum([p["max_additional"] for p in profile_analysis]),
             "analysis_timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate profile preview: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate enhanced profile preview: {str(e)}")
 
 
 @router.get("/capacity/clusters")

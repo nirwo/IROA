@@ -776,131 +776,172 @@
         <div v-if="activeTab === 'profiles'" class="tab-content">
           <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">Profile Preview</h2>
-            <p class="text-gray-600">View VM profiles and capacity planning with 80% utilization rule</p>
+            <p class="text-gray-600">Discover VM profiles from actual sizing and calculate capacity based on available cores, memory, and storage</p>
           </div>
 
           <!-- Profile View Controls -->
           <div class="mb-6">
             <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center space-x-4">
                   <button @click="loadProfilePreview" :disabled="loading.profiles" 
                           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
                     <div v-if="loading.profiles" class="loading-spinner mr-2"></div>
                     <i v-else data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
-                    {{ loading.profiles ? 'Loading...' : 'Refresh Profile Data' }}
+                    {{ loading.profiles ? 'Analyzing VMs...' : 'Analyze VM Profiles' }}
                   </button>
+                </div>
+                <div class="flex items-center space-x-4">
                   <div class="flex items-center space-x-2">
-                    <label class="text-sm font-medium text-gray-700">View By:</label>
-                    <select v-model="profileView" @change="loadProfilePreview" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="overall">Overall Infrastructure</option>
-                      <option value="cluster">By Cluster</option>
+                    <label class="text-sm font-medium text-gray-700">Select Cluster:</label>
+                    <select v-model="selectedProfileCluster" @change="loadProfilePreview" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">All Clusters</option>
+                      <option v-for="cluster in availableClusters" :key="cluster" :value="cluster">{{ cluster }}</option>
                     </select>
                   </div>
-                </div>
-                <div v-if="profileView === 'cluster'" class="flex items-center space-x-2">
-                  <label class="text-sm font-medium text-gray-700">Select Cluster:</label>
-                  <select v-model="selectedProfileCluster" @change="loadProfilePreview" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">All Clusters</option>
-                    <option v-for="cluster in availableClusters" :key="cluster" :value="cluster">{{ cluster }}</option>
-                  </select>
+                  <div v-if="profilePreview.cluster_name" class="text-sm text-gray-600">
+                    Analyzing: <span class="font-semibold">{{ profilePreview.cluster_name }}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- System Capacity Overview -->
-          <div v-if="profilePreview.system_capacity" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+          <!-- Cluster Capacity Overview -->
+          <div v-if="profilePreview.cluster_capacity" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <i data-lucide="server" class="w-5 h-5 mr-2 text-blue-500"></i>
-              System Capacity (80% Rule)
+              {{ profilePreview.cluster_name }} Capacity (80% Rule)
             </h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div class="text-center">
-                <div class="text-2xl font-bold text-blue-600">{{ profilePreview.system_capacity.total_cpu_cores }}</div>
+                <div class="text-2xl font-bold text-blue-600">{{ profilePreview.cluster_capacity.total_cpu_cores }}</div>
                 <div class="text-sm text-gray-500">Total CPU Cores</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-green-600">{{ profilePreview.system_capacity.total_memory_gb }}GB</div>
+                <div class="text-2xl font-bold text-green-600">{{ profilePreview.cluster_capacity.total_memory_gb }}GB</div>
                 <div class="text-sm text-gray-500">Total Memory</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-orange-600">{{ Math.round(profilePreview.system_capacity.cpu_utilization_percent) }}%</div>
-                <div class="text-sm text-gray-500">CPU Utilization</div>
+                <div class="text-2xl font-bold text-purple-600">{{ profilePreview.cluster_capacity.total_disk_gb }}GB</div>
+                <div class="text-sm text-gray-500">Total Storage</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-red-600">{{ Math.round(profilePreview.system_capacity.memory_utilization_percent) }}%</div>
-                <div class="text-sm text-gray-500">Memory Utilization</div>
+                <div class="text-2xl font-bold text-orange-600">{{ Math.round(profilePreview.cluster_capacity.cpu_utilization_percent) }}%</div>
+                <div class="text-sm text-gray-500">CPU Usage</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-red-600">{{ Math.round(profilePreview.cluster_capacity.memory_utilization_percent) }}%</div>
+                <div class="text-sm text-gray-500">Memory Usage</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-indigo-600">{{ Math.round(profilePreview.cluster_capacity.disk_utilization_percent) }}%</div>
+                <div class="text-sm text-gray-500">Storage Usage</div>
               </div>
             </div>
           </div>
 
-          <!-- Profile Analysis -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            <div v-for="profile in profilePreview.profile_analysis" :key="profile.profile_id" 
-                 class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <div class="flex items-start justify-between mb-4">
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900">{{ profile.profile_name }}</h3>
-                  <p class="text-sm text-gray-500">{{ profile.cpu_per_vm }}CPU / {{ profile.memory_per_vm }}GB RAM</p>
-                </div>
-                <div class="text-right">
-                  <div class="text-2xl font-bold text-blue-600">{{ profile.current_count }}</div>
-                  <div class="text-xs text-gray-500">Current</div>
-                </div>
+          <!-- Discovered Profiles -->
+          <div v-if="profilePreview.profiles_discovered && profilePreview.profiles_discovered.length > 0">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                <i data-lucide="layers" class="w-5 h-5 mr-2 text-green-500"></i>
+                Discovered VM Profiles ({{ profilePreview.total_profiles_found }})
+              </h3>
+              <div class="text-sm text-gray-600">
+                Based on actual VM sizing in {{ profilePreview.cluster_name }}
               </div>
-
-              <div class="space-y-3">
-                <!-- Resource Usage -->
-                <div>
-                  <div class="flex justify-between text-sm mb-1">
-                    <span>CPU Usage</span>
-                    <span>{{ profile.profile_cpu_usage_percent }}%</span>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div v-for="profile in profilePreview.profiles_discovered" :key="profile.profile_key" 
+                   class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 class="text-lg font-semibold text-gray-900">{{ profile.profile_name }}</h4>
+                    <p class="text-sm text-gray-500">{{ profile.cpu_per_vm }} CPU • {{ profile.memory_per_vm }}GB RAM • {{ profile.disk_per_vm }}GB Disk</p>
                   </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-blue-500 h-2 rounded-full" :style="{width: profile.profile_cpu_usage_percent + '%'}"></div>
-                  </div>
-                </div>
-
-                <div>
-                  <div class="flex justify-between text-sm mb-1">
-                    <span>Memory Usage</span>
-                    <span>{{ profile.profile_memory_usage_percent }}%</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-green-500 h-2 rounded-full" :style="{width: profile.profile_memory_usage_percent + '%'}"></div>
+                  <div class="text-right">
+                    <div class="text-2xl font-bold text-blue-600">{{ profile.current_count }}</div>
+                    <div class="text-xs text-gray-500">Current VMs</div>
                   </div>
                 </div>
 
-                <!-- License Status -->
-                <div class="flex items-center justify-between py-2 px-3 rounded-lg" 
-                     :class="profile.license_available ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
-                  <span class="text-sm font-medium">{{ profile.license_type }}</span>
-                  <div class="flex items-center">
-                    <i :data-lucide="profile.license_available ? 'check-circle' : 'x-circle'" class="w-4 h-4 mr-1"></i>
-                    <span class="text-xs">{{ profile.license_count_available }} available</span>
+                <div class="space-y-3">
+                  <!-- Resource Usage Bars -->
+                  <div>
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>CPU Usage</span>
+                      <span>{{ profile.profile_cpu_usage_percent }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div class="bg-blue-500 h-2 rounded-full" :style="{width: Math.min(profile.profile_cpu_usage_percent, 100) + '%'}"></div>
+                    </div>
                   </div>
-                </div>
 
-                <!-- Capacity Planning -->
-                <div class="border-t pt-3">
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="text-sm font-medium text-gray-700">Max Additional VMs</span>
-                    <span class="text-lg font-bold text-green-600">+{{ profile.max_additional }}</span>
+                  <div>
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>Memory Usage</span>
+                      <span>{{ profile.profile_memory_usage_percent }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div class="bg-green-500 h-2 rounded-full" :style="{width: Math.min(profile.profile_memory_usage_percent, 100) + '%'}"></div>
+                    </div>
                   </div>
-                  <div class="flex justify-between items-center">
-                    <span class="text-sm text-gray-500">Total Possible</span>
-                    <span class="text-sm font-semibold">{{ profile.max_total_possible }}</span>
+
+                  <div>
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>Storage Usage</span>
+                      <span>{{ profile.profile_disk_usage_percent }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div class="bg-purple-500 h-2 rounded-full" :style="{width: Math.min(profile.profile_disk_usage_percent, 100) + '%'}"></div>
+                    </div>
                   </div>
-                  <div class="mt-2">
-                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-                          :class="{
-                            'bg-red-100 text-red-800': profile.limiting_factor === 'License',
-                            'bg-orange-100 text-orange-800': profile.limiting_factor === 'CPU',
-                            'bg-yellow-100 text-yellow-800': profile.limiting_factor === 'Memory'
-                          }">
-                      Limited by: {{ profile.limiting_factor }}
-                    </span>
+
+                  <!-- Capacity Planning -->
+                  <div class="border-t pt-3">
+                    <div class="flex justify-between items-center mb-2">
+                      <span class="text-sm font-medium text-gray-700">Max Additional VMs</span>
+                      <span class="text-lg font-bold text-green-600">+{{ profile.max_additional }}</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                      <span class="text-sm text-gray-500">Total Possible</span>
+                      <span class="text-sm font-semibold">{{ profile.max_total_possible }}</span>
+                    </div>
+                    
+                    <!-- Capacity Breakdown -->
+                    <div class="text-xs text-gray-500 mb-2">
+                      Max by CPU: {{ profile.capacity_breakdown.max_by_cpu }} • 
+                      Memory: {{ profile.capacity_breakdown.max_by_memory }} • 
+                      Storage: {{ profile.capacity_breakdown.max_by_disk }}
+                    </div>
+                    
+                    <div class="mt-2">
+                      <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                            :class="{
+                              'bg-orange-100 text-orange-800': profile.limiting_factor === 'CPU',
+                              'bg-yellow-100 text-yellow-800': profile.limiting_factor === 'Memory',
+                              'bg-purple-100 text-purple-800': profile.limiting_factor === 'Storage'
+                            }">
+                        Limited by: {{ profile.limiting_factor }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- VMs in Profile -->
+                  <div v-if="profile.vms_in_profile && profile.vms_in_profile.length > 0" class="border-t pt-3">
+                    <div class="text-xs font-medium text-gray-700 mb-2">VMs in this profile:</div>
+                    <div class="flex flex-wrap gap-1">
+                      <span v-for="vm in profile.vms_in_profile.slice(0, 3)" :key="vm.name" 
+                            class="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">
+                        {{ vm.name }}
+                      </span>
+                      <span v-if="profile.vms_in_profile.length > 3" 
+                            class="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-200 text-gray-600">
+                        +{{ profile.vms_in_profile.length - 3 }} more
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -911,15 +952,19 @@
           <div v-if="profilePreview.total_current_vms" class="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
             <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <i data-lucide="bar-chart-3" class="w-5 h-5 mr-2 text-blue-500"></i>
-              Capacity Summary
+              Capacity Summary for {{ profilePreview.cluster_name }}
             </h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div class="text-center">
-                <div class="text-3xl font-bold text-blue-600">{{ profilePreview.total_current_vms }}</div>
+                <div class="text-3xl font-bold text-blue-600">{{ profilePreview.total_profiles_found }}</div>
+                <div class="text-sm text-gray-600">Profiles Discovered</div>
+              </div>
+              <div class="text-center">
+                <div class="text-3xl font-bold text-green-600">{{ profilePreview.total_current_vms }}</div>
                 <div class="text-sm text-gray-600">Current VMs</div>
               </div>
               <div class="text-center">
-                <div class="text-3xl font-bold text-green-600">+{{ profilePreview.total_max_additional_vms }}</div>
+                <div class="text-3xl font-bold text-orange-600">+{{ profilePreview.total_max_additional_vms }}</div>
                 <div class="text-sm text-gray-600">Additional Possible</div>
               </div>
               <div class="text-center">
@@ -930,10 +975,10 @@
           </div>
 
           <!-- Empty State -->
-          <div v-if="!profilePreview.profile_analysis || profilePreview.profile_analysis.length === 0" class="text-center py-12">
+          <div v-if="!profilePreview.profiles_discovered || profilePreview.profiles_discovered.length === 0" class="text-center py-12">
             <i data-lucide="layers" class="w-16 h-16 text-gray-300 mx-auto mb-4"></i>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">No profile data available</h3>
-            <p class="text-gray-600 mb-6">Click "Refresh Profile Data" to load VM profiles and capacity analysis.</p>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No VM profiles discovered</h3>
+            <p class="text-gray-600 mb-6">Click "Analyze VM Profiles" to discover profiles from actual VM sizing and calculate capacity.</p>
           </div>
         </div>
 
@@ -2916,12 +2961,12 @@
         async loadProfilePreview() {
           this.loading.profiles = true;
           try {
-            console.log(`🔄 Loading profile preview (view: ${this.profileView}, cluster: ${this.selectedProfileCluster})...`);
+            console.log(`🔄 Analyzing VM profiles (cluster: ${this.selectedProfileCluster || 'All Clusters'})...`);
             
             let endpoint = `${this.apiBaseUrl}/profiles/preview`;
             
-            // Add cluster parameter if cluster view is selected
-            if (this.profileView === 'cluster' && this.selectedProfileCluster) {
+            // Add cluster parameter if specific cluster is selected
+            if (this.selectedProfileCluster) {
               endpoint += `?cluster=${encodeURIComponent(this.selectedProfileCluster)}`;
             }
             
@@ -2929,16 +2974,19 @@
             if (response.ok) {
               const data = await response.json();
               
-              // Transform data to ensure integer values
-              if (data.system_capacity) {
-                data.system_capacity.total_cpu_cores = Math.round(data.system_capacity.total_cpu_cores || 0);
-                data.system_capacity.total_memory_gb = Math.round(data.system_capacity.total_memory_gb || 0);
-                data.system_capacity.cpu_utilization_percent = Math.round(data.system_capacity.cpu_utilization_percent || 0);
-                data.system_capacity.memory_utilization_percent = Math.round(data.system_capacity.memory_utilization_percent || 0);
+              // Transform data to ensure integer values for cluster capacity
+              if (data.cluster_capacity) {
+                data.cluster_capacity.total_cpu_cores = Math.round(data.cluster_capacity.total_cpu_cores || 0);
+                data.cluster_capacity.total_memory_gb = Math.round(data.cluster_capacity.total_memory_gb || 0);
+                data.cluster_capacity.total_disk_gb = Math.round(data.cluster_capacity.total_disk_gb || 0);
+                data.cluster_capacity.cpu_utilization_percent = Math.round(data.cluster_capacity.cpu_utilization_percent || 0);
+                data.cluster_capacity.memory_utilization_percent = Math.round(data.cluster_capacity.memory_utilization_percent || 0);
+                data.cluster_capacity.disk_utilization_percent = Math.round(data.cluster_capacity.disk_utilization_percent || 0);
               }
               
-              if (data.profile_analysis && Array.isArray(data.profile_analysis)) {
-                data.profile_analysis = data.profile_analysis.map(profile => ({
+              // Transform discovered profiles to ensure integer values
+              if (data.profiles_discovered && Array.isArray(data.profiles_discovered)) {
+                data.profiles_discovered = data.profiles_discovered.map(profile => ({
                   ...profile,
                   current_count: Math.round(profile.current_count || 0),
                   max_additional: Math.round(profile.max_additional || 0),
@@ -2947,17 +2995,18 @@
                   memory_per_vm: Math.round(profile.memory_per_vm || 0),
                   disk_per_vm: Math.round(profile.disk_per_vm || 0),
                   profile_cpu_usage_percent: Math.round(profile.profile_cpu_usage_percent || 0),
-                  profile_memory_usage_percent: Math.round(profile.profile_memory_usage_percent || 0)
+                  profile_memory_usage_percent: Math.round(profile.profile_memory_usage_percent || 0),
+                  profile_disk_usage_percent: Math.round(profile.profile_disk_usage_percent || 0)
                 }));
               }
               
               this.profilePreview = data;
               
-              const clusterMsg = this.profileView === 'cluster' && this.selectedProfileCluster ? 
-                ` for cluster: ${this.selectedProfileCluster}` : '';
+              const clusterMsg = this.selectedProfileCluster ? 
+                ` for cluster: ${this.selectedProfileCluster}` : ' across all clusters';
               
-              console.log('✅ Profile preview loaded successfully:', data);
-              this.showNotification(`Profile preview loaded successfully${clusterMsg}`, 'success');
+              console.log(`✅ Profile analysis complete: ${data.total_profiles_found || 0} profiles discovered${clusterMsg}`, data);
+              this.showNotification(`Discovered ${data.total_profiles_found || 0} VM profiles${clusterMsg}`, 'success');
             } else {
               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
