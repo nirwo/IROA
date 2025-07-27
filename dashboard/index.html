@@ -3470,53 +3470,74 @@
         async testConnection(integrationType) {
           console.log(`🔧 Testing ${integrationType} connection...`);
           this.loading.connectionTest = true;
+          
           try {
             const form = this.adminData.connectionForms[integrationType];
             
-            // Enhanced credential debugging before sending
+            // Validate required fields for all integration types
+            const missingFields = [];
+            
             if (integrationType === 'vcenter') {
-              console.log('📤 Sending vCenter credentials:');
+              console.log('📤 Testing vCenter connection:');
               console.log(`   Host: '${form.host}' (length: ${form.host ? form.host.length : 0})`);
               console.log(`   Username: '${form.username}' (length: ${form.username ? form.username.length : 0})`);
               console.log(`   Password: ${'*'.repeat(form.password ? form.password.length : 0)} (length: ${form.password ? form.password.length : 0})`);
+              
+              if (!form.host || form.host.trim() === '') missingFields.push('Host');
+              if (!form.username || form.username.trim() === '') missingFields.push('Username');
+              if (!form.password || form.password.trim() === '') missingFields.push('Password');
+              
             } else if (integrationType === 'zabbix') {
-              console.log('📤 Sending Zabbix credentials:');
+              console.log('📤 Testing Zabbix connection:');
               console.log(`   URL: '${form.url}' (length: ${form.url ? form.url.length : 0})`);
               console.log(`   Username: '${form.username}' (length: ${form.username ? form.username.length : 0})`);
               console.log(`   Password: ${'*'.repeat(form.password ? form.password.length : 0)} (length: ${form.password ? form.password.length : 0})`);
               
-              // Validate required fields before sending
-              const missingFields = [];
               if (!form.url || form.url.trim() === '') missingFields.push('URL');
               if (!form.username || form.username.trim() === '') missingFields.push('Username');
               if (!form.password || form.password.trim() === '') missingFields.push('Password');
               
-              if (missingFields.length > 0) {
-                console.error(`❌ Missing required Zabbix fields: ${missingFields.join(', ')}`);
-                this.showNotification(`Missing required connection information: ${missingFields.join(', ')}`, 'error');
-                return;
-              }
+            } else if (integrationType === 'prometheus') {
+              console.log('📤 Testing Prometheus connection:');
+              console.log(`   URL: '${form.url}' (length: ${form.url ? form.url.length : 0})`);
+              
+              if (!form.url || form.url.trim() === '') missingFields.push('URL');
+              // Prometheus may not require authentication
+            }
+            
+            // Check for missing required fields
+            if (missingFields.length > 0) {
+              console.error(`❌ Missing required ${integrationType} fields: ${missingFields.join(', ')}`);
+              this.showNotification(`Missing required connection information: ${missingFields.join(', ')}`, 'error');
+              return;
             }
             
             const endpoint = `${this.apiBaseUrl}/admin/${integrationType}/test`;
+            console.log(`🌐 Sending request to: ${endpoint}`);
             
             const response = await fetch(endpoint, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: this.getAuthHeaders(),
               body: JSON.stringify(form)
             });
             
+            console.log(`📡 Response status: ${response.status}`);
             const data = await response.json();
+            console.log(`📋 Response data:`, data);
             
             if (response.ok && data.status === 'success') {
-              this.showNotification(data.message, 'success');
+              console.log(`✅ ${integrationType} connection test successful`);
+              this.showNotification(data.message || `${integrationType} connection test successful!`, 'success');
             } else {
-              this.showNotification(data.detail || 'Connection test failed', 'error');
+              console.error(`❌ ${integrationType} connection test failed:`, data);
+              this.showNotification(data.detail || `${integrationType} connection test failed`, 'error');
             }
           } catch (error) {
-            this.showNotification('Connection test failed: ' + error.message, 'error');
+            console.error(`💥 ${integrationType} connection test error:`, error);
+            this.showNotification(`Connection test failed: ${error.message}`, 'error');
           } finally {
             this.loading.connectionTest = false;
+            console.log(`🏁 ${integrationType} connection test completed`);
           }
         },
 
