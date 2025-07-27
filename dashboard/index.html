@@ -819,7 +819,7 @@
                 <div class="text-sm text-gray-500">Total CPU Cores</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-green-600">{{ profilePreview.cluster_capacity.remaining_vcpu }}</div>
+                <div class="text-2xl font-bold text-green-600">{{ profilePreview.cluster_capacity ? profilePreview.cluster_capacity.remaining_vcpu || 0 : 0 }}</div>
                 <div class="text-sm text-gray-500">Available vCPUs</div>
               </div>
               </div>
@@ -834,10 +834,10 @@
               <div>
                 <div class="flex justify-between text-sm mb-1">
                   <span>vCPU Allocation</span>
-                  <span>{{ Math.round(profilePreview.cluster_capacity.vcpu_allocation_percent) }}%</span>
+                  <span>{{ profilePreview.cluster_capacity ? Math.round(profilePreview.cluster_capacity.vcpu_allocation_percent || 0) : 0 }}%</span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2">
-                  <div class="bg-blue-500 h-2 rounded-full" :style="{width: Math.min(profilePreview.cluster_capacity.vcpu_allocation_percent, 100) + '%'}"></div>
+                  <div class="bg-blue-500 h-2 rounded-full" :style="{width: Math.min(profilePreview.cluster_capacity ? profilePreview.cluster_capacity.vcpu_allocation_percent || 0 : 0, 100) + '%'}"></div>
                 </div>
               </div>
               <div>
