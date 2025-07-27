@@ -1179,6 +1179,141 @@
               </div>
             </div>
           </div>
+
+          <!-- Resource Termination Section -->
+          <div class="mt-8">
+            <h3 class="text-xl font-semibold text-gray-900 mb-6">🛑 Resource Termination Controls</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              <!-- VM Termination -->
+              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <i data-lucide="server" class="w-5 h-5 mr-2 text-red-500"></i>
+                  Virtual Machines
+                </h4>
+                <p class="text-gray-600 mb-4">Terminate or shutdown virtual machines</p>
+                
+                <div class="space-y-3">
+                  <select v-model="terminationData.selectedVM" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500">
+                    <option value="">Select VM to terminate</option>
+                    <option v-for="vm in vms.filter(v => v.status === 'running')" :key="vm.name" :value="vm.name">
+                      {{ vm.name }} ({{ vm.source }})
+                    </option>
+                  </select>
+                  
+                  <div class="flex space-x-2">
+                    <button @click="terminateVM('shutdown')" :disabled="!terminationData.selectedVM || loading.termination" 
+                            class="flex-1 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center">
+                      <div v-if="loading.termination" class="loading-spinner mr-2"></div>
+                      <i v-else data-lucide="power" class="w-4 h-4 mr-2"></i>
+                      Shutdown
+                    </button>
+                    <button @click="terminateVM('force')" :disabled="!terminationData.selectedVM || loading.termination" 
+                            class="flex-1 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center justify-center">
+                      <div v-if="loading.termination" class="loading-spinner mr-2"></div>
+                      <i v-else data-lucide="zap" class="w-4 h-4 mr-2"></i>
+                      Force Stop
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Session Termination -->
+              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <i data-lucide="users" class="w-5 h-5 mr-2 text-blue-500"></i>
+                  User Sessions
+                </h4>
+                <p class="text-gray-600 mb-4">Terminate active user sessions</p>
+                
+                <div class="space-y-3">
+                  <button @click="loadActiveSessions()" :disabled="loading.sessions" 
+                          class="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center">
+                    <div v-if="loading.sessions" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+                    Load Active Sessions
+                  </button>
+                  
+                  <div v-if="terminationData.activeSessions.length > 0" class="max-h-32 overflow-y-auto space-y-2">
+                    <div v-for="session in terminationData.activeSessions" :key="session.id" 
+                         class="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
+                      <div>
+                        <div class="font-medium">{{ session.user }}</div>
+                        <div class="text-gray-500">{{ session.host }} - {{ session.duration }}</div>
+                      </div>
+                      <button @click="terminateSession(session.id)" :disabled="loading.termination" 
+                              class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
+                        End
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div v-else-if="!loading.sessions" class="text-center text-gray-500 text-sm py-4">
+                    No active sessions found
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Process Termination -->
+              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <i data-lucide="cpu" class="w-5 h-5 mr-2 text-green-500"></i>
+                  System Processes
+                </h4>
+                <p class="text-gray-600 mb-4">Terminate high-resource processes</p>
+                
+                <div class="space-y-3">
+                  <button @click="loadHighResourceProcesses()" :disabled="loading.processes" 
+                          class="w-full px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
+                    <div v-if="loading.processes" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="activity" class="w-4 h-4 mr-2"></i>
+                    Load High-CPU Processes
+                  </button>
+                  
+                  <div v-if="terminationData.highResourceProcesses.length > 0" class="max-h-32 overflow-y-auto space-y-2">
+                    <div v-for="process in terminationData.highResourceProcesses" :key="process.pid" 
+                         class="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
+                      <div>
+                        <div class="font-medium">{{ process.name }}</div>
+                        <div class="text-gray-500">PID: {{ process.pid }} - CPU: {{ process.cpu }}%</div>
+                      </div>
+                      <button @click="terminateProcess(process.pid)" :disabled="loading.termination" 
+                              class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
+                        Kill
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div v-else-if="!loading.processes" class="text-center text-gray-500 text-sm py-4">
+                    No high-resource processes found
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Termination Logs -->
+            <div v-if="terminationData.logs.length > 0" class="mt-6 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i data-lucide="file-text" class="w-5 h-5 mr-2 text-gray-500"></i>
+                Termination Logs
+              </h4>
+              <div class="max-h-40 overflow-y-auto space-y-2">
+                <div v-for="(log, index) in terminationData.logs.slice(-10)" :key="index" 
+                     class="flex items-center justify-between p-2 border-b border-gray-100 text-sm">
+                  <div>
+                    <span class="font-medium">{{ log.action }}</span>
+                    <span class="text-gray-600 ml-2">{{ log.target }}</span>
+                  </div>
+                  <div class="text-right">
+                    <div :class="log.success ? 'text-green-600' : 'text-red-600'" class="font-medium">
+                      {{ log.success ? 'Success' : 'Failed' }}
+                    </div>
+                    <div class="text-gray-500 text-xs">{{ new Date(log.timestamp).toLocaleTimeString() }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Recommendations Tab -->
@@ -1456,8 +1591,9 @@
           <div v-if="clusterAnalytics && Object.keys(clusterAnalytics).length > 0" class="mb-8">
             <h3 class="text-xl font-semibold text-gray-900 mb-4">Cluster Analytics Overview</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div v-for="(cluster, clusterName) in clusterAnalytics" :key="clusterName" 
-                   class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition-shadow">
+              <div v-for="(cluster, clusterName) in clusterAnalytics" :key="`cluster-${clusterName}`" 
+                   class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition-shadow"
+                   v-if="cluster && clusterName">
                 <div class="flex items-center justify-between mb-4">
                   <h4 class="text-lg font-semibold text-gray-900">{{ clusterName }}</h4>
                   <div class="flex items-center space-x-2">
@@ -1498,10 +1634,11 @@
                 <div class="mt-4">
                   <div class="text-xs text-gray-500 mb-2">24h CPU Trend</div>
                   <div class="flex items-end space-x-1 h-8">
-                    <div v-for="(point, index) in cluster.cpu_usage_trend.slice(-12)" :key="index" 
+                    <div v-for="(point, index) in (cluster.cpu_usage_trend || []).slice(-12)" :key="`trend-${clusterName}-${index}`" 
                          class="bg-blue-200 rounded-sm flex-1" 
                          :style="{height: Math.max(2, (point.value / 100) * 32) + 'px'}"
-                         :title="`Hour ${point.hour}: ${Math.round(point.value)}% CPU`">
+                         :title="`Hour ${point.hour}: ${Math.round(point.value)}% CPU`"
+                         v-if="point && typeof point.value === 'number'">
                     </div>
                   </div>
                 </div>
@@ -1518,8 +1655,9 @@
                 <div>
                   <h4 class="text-lg font-semibold text-gray-900 mb-4">Usage Timeline</h4>
                   <div class="space-y-3">
-                    <div v-for="(point, index) in historicalAnalytics.slice(-10)" :key="index" 
-                         class="flex justify-between items-center py-2 border-b border-gray-100">
+                    <div v-for="(point, index) in (historicalAnalytics || []).slice(-10)" :key="`history-${index}-${point.timestamp}`" 
+                         class="flex justify-between items-center py-2 border-b border-gray-100"
+                         v-if="point && point.timestamp">
                       <div>
                         <div class="text-sm font-medium text-gray-900">
                           {{ new Date(point.timestamp).toLocaleString() }}
@@ -1702,7 +1840,16 @@
             vcenterSync: false,
             infrastructure: false,
             storing: false,
-            historical: false
+            historical: false,
+            termination: false,
+            sessions: false,
+            processes: false
+          },
+          terminationData: {
+            selectedVM: '',
+            activeSessions: [],
+            highResourceProcesses: [],
+            logs: []
           },
           apiBaseUrl: (() => {
             // Detect the correct API base URL for both local and remote server deployment
@@ -3114,6 +3261,187 @@
             this.historicalAnalytics = [];
           } finally {
             this.loading.historical = false;
+          }
+        },
+
+        // Termination Methods
+        async terminateVM(action) {
+          if (!this.terminationData.selectedVM) {
+            this.showNotification('Please select a VM to terminate', 'error');
+            return;
+          }
+          
+          this.loading.termination = true;
+          try {
+            console.log(`🛑 Attempting to ${action} VM: ${this.terminationData.selectedVM}`);
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/terminate/vm`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                vm_name: this.terminationData.selectedVM,
+                action: action
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+              console.log(`✅ VM ${action} successful:`, data.message);
+              this.showNotification(`VM ${action} successful: ${data.message}`, 'success');
+              this.addTerminationLog(`VM ${action}`, this.terminationData.selectedVM, true);
+              this.terminationData.selectedVM = '';
+              // Refresh VM list
+              await this.loadUnderutilizedVMs();
+            } else {
+              console.error(`❌ VM ${action} failed:`, data.error);
+              this.showNotification(`VM ${action} failed: ${data.error}`, 'error');
+              this.addTerminationLog(`VM ${action}`, this.terminationData.selectedVM, false);
+            }
+          } catch (error) {
+            console.error(`❌ VM ${action} error:`, error);
+            this.showNotification(`VM ${action} error: ${error.message}`, 'error');
+            this.addTerminationLog(`VM ${action}`, this.terminationData.selectedVM, false);
+          } finally {
+            this.loading.termination = false;
+          }
+        },
+        
+        async loadActiveSessions() {
+          this.loading.sessions = true;
+          try {
+            console.log('👥 Loading active user sessions...');
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/sessions/active`);
+            const data = await response.json();
+            
+            if (response.ok) {
+              this.terminationData.activeSessions = data.sessions || [];
+              console.log(`✅ Loaded ${this.terminationData.activeSessions.length} active sessions`);
+              this.showNotification(`Found ${this.terminationData.activeSessions.length} active sessions`, 'success');
+            } else {
+              console.warn('⚠️ Failed to load sessions:', data.error);
+              this.showNotification(`Failed to load sessions: ${data.error}`, 'warning');
+              this.terminationData.activeSessions = [];
+            }
+          } catch (error) {
+            console.error('❌ Session loading error:', error);
+            this.showNotification(`Session loading error: ${error.message}`, 'error');
+            this.terminationData.activeSessions = [];
+          } finally {
+            this.loading.sessions = false;
+          }
+        },
+        
+        async terminateSession(sessionId) {
+          this.loading.termination = true;
+          try {
+            console.log(`🛑 Terminating session: ${sessionId}`);
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/terminate/session`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ session_id: sessionId })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+              console.log('✅ Session terminated successfully:', data.message);
+              this.showNotification(`Session terminated: ${data.message}`, 'success');
+              this.addTerminationLog('Session termination', sessionId, true);
+              // Refresh session list
+              await this.loadActiveSessions();
+            } else {
+              console.error('❌ Session termination failed:', data.error);
+              this.showNotification(`Session termination failed: ${data.error}`, 'error');
+              this.addTerminationLog('Session termination', sessionId, false);
+            }
+          } catch (error) {
+            console.error('❌ Session termination error:', error);
+            this.showNotification(`Session termination error: ${error.message}`, 'error');
+            this.addTerminationLog('Session termination', sessionId, false);
+          } finally {
+            this.loading.termination = false;
+          }
+        },
+        
+        async loadHighResourceProcesses() {
+          this.loading.processes = true;
+          try {
+            console.log('⚡ Loading high-resource processes...');
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/processes/high-resource`);
+            const data = await response.json();
+            
+            if (response.ok) {
+              this.terminationData.highResourceProcesses = data.processes || [];
+              console.log(`✅ Loaded ${this.terminationData.highResourceProcesses.length} high-resource processes`);
+              this.showNotification(`Found ${this.terminationData.highResourceProcesses.length} high-resource processes`, 'success');
+            } else {
+              console.warn('⚠️ Failed to load processes:', data.error);
+              this.showNotification(`Failed to load processes: ${data.error}`, 'warning');
+              this.terminationData.highResourceProcesses = [];
+            }
+          } catch (error) {
+            console.error('❌ Process loading error:', error);
+            this.showNotification(`Process loading error: ${error.message}`, 'error');
+            this.terminationData.highResourceProcesses = [];
+          } finally {
+            this.loading.processes = false;
+          }
+        },
+        
+        async terminateProcess(pid) {
+          this.loading.termination = true;
+          try {
+            console.log(`🛑 Terminating process: ${pid}`);
+            
+            const response = await fetch(`${this.apiBaseUrl}/admin/terminate/process`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ pid: pid })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+              console.log('✅ Process terminated successfully:', data.message);
+              this.showNotification(`Process terminated: ${data.message}`, 'success');
+              this.addTerminationLog('Process termination', pid, true);
+              // Refresh process list
+              await this.loadHighResourceProcesses();
+            } else {
+              console.error('❌ Process termination failed:', data.error);
+              this.showNotification(`Process termination failed: ${data.error}`, 'error');
+              this.addTerminationLog('Process termination', pid, false);
+            }
+          } catch (error) {
+            console.error('❌ Process termination error:', error);
+            this.showNotification(`Process termination error: ${error.message}`, 'error');
+            this.addTerminationLog('Process termination', pid, false);
+          } finally {
+            this.loading.termination = false;
+          }
+        },
+        
+        addTerminationLog(action, target, success) {
+          this.terminationData.logs.push({
+            action: action,
+            target: target,
+            success: success,
+            timestamp: new Date().toISOString()
+          });
+          
+          // Keep only last 50 logs
+          if (this.terminationData.logs.length > 50) {
+            this.terminationData.logs = this.terminationData.logs.slice(-50);
           }
         },
 
