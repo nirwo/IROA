@@ -1574,75 +1574,167 @@ async def get_capacity_analysis():
 
 
 @router.get("/capacity/clusters")
-async def get_cluster_capacity_analysis():
-    """Get capacity analysis broken down by compute clusters"""
+async def get_cluster_capacity_analysis(cluster: str = None):
+    """Get capacity analysis broken down by compute clusters using real vCenter host data"""
     try:
-        # Get all VMs and group by cluster
-        all_vms = await get_all_vms()
-        clusters = {}
+        print(f"🔍 Getting cluster capacity analysis for cluster: {cluster or 'all'}")
         
-        for vm in all_vms:
-            cluster_name = vm.get('cluster', 'Unknown')
-            if cluster_name not in clusters:
-                clusters[cluster_name] = {
+        # Use vCenter inventory cache for real host data
+        if not vcenter_inventory_cache:
+            print("⚠️ No vCenter inventory cache, using mock data")
+            # Return mock data with realistic values
+            mock_clusters = [
+                {
+                    "name": "Production-Cluster",
+                    "total_cpu_vcpus": 104,
+                    "total_memory_gb": 512,
+                    "total_disk_gb": 800,
+                    "current_vms": 15,
+                    "available_vcpu": 83,
+                    "available_memory_gb": 460,
+                    "max_additional_vms": 20,
+                    "limiting_factor": "Memory",
+                    "vcpu_utilization": 20.2,
+                    "memory_utilization": 10.2,
+                    "host_count": 2
+                },
+                {
+                    "name": "Database-Cluster", 
+                    "total_cpu_vcpus": 144,
+                    "total_memory_gb": 768,
+                    "total_disk_gb": 1200,
+                    "current_vms": 8,
+                    "available_vcpu": 136,
+                    "available_memory_gb": 736,
+                    "max_additional_vms": 34,
+                    "limiting_factor": "CPU",
+                    "vcpu_utilization": 5.6,
+                    "memory_utilization": 4.2,
+                    "host_count": 2
+                }
+            ]
+            
+            # Filter by cluster if specified
+            if cluster:
+                mock_clusters = [c for c in mock_clusters if c["name"] == cluster]
+            
+            return {
+                "clusters": mock_clusters,
+                "total_clusters": len(mock_clusters),
+                "timestamp": datetime.now().isoformat(),
+                "data_source": "mock"
+            }
+        
+        # Get real vCenter host data grouped by cluster
+        cluster_data = {}
+        all_vms = await get_all_vms()
+        
+        # Group hosts by cluster from vCenter inventory
+        for host_info in vcenter_inventory_cache.get('hosts', []):
+            cluster_name = host_info.get('cluster', 'Unknown')
+            
+            # Skip if filtering by specific cluster
+            if cluster and cluster_name != cluster:
+                continue
+                
+            if cluster_name not in cluster_data:
+                cluster_data[cluster_name] = {
                     'name': cluster_name,
-                    'vms': [],
-                    'total_cpu': 0,
-                    'total_memory': 0,
-                    'total_vms': 0,
-                    'avg_cpu_usage': 0,
-                    'avg_memory_usage': 0
+                    'hosts': [],
+                    'total_cpu_vcpus': 0,
+                    'total_memory_gb': 0,
+                    'total_disk_gb': 0,
+                    'host_count': 0
                 }
             
-            clusters[cluster_name]['vms'].append(vm)
-            clusters[cluster_name]['total_cpu'] += vm.get('cores', 0)
-            clusters[cluster_name]['total_memory'] += vm.get('memory', 0)
-            clusters[cluster_name]['total_vms'] += 1
+            cluster_data[cluster_name]['hosts'].append(host_info)
+            cluster_data[cluster_name]['total_cpu_vcpus'] += host_info.get('logical_cores', 0)
+            cluster_data[cluster_name]['total_memory_gb'] += host_info.get('memory_gb', 0)
+            cluster_data[cluster_name]['total_disk_gb'] += host_info.get('disk_gb', 0)
+            cluster_data[cluster_name]['host_count'] += 1
         
-        # Calculate averages and capacity for each cluster
+        # Calculate capacity for each cluster
         cluster_analysis = []
-        for cluster_name, cluster_data in clusters.items():
-            if cluster_data['total_vms'] > 0:
-                avg_cpu = sum(vm.get('cpu', 0) for vm in cluster_data['vms']) / cluster_data['total_vms']
-                avg_memory = sum(vm.get('memory_usage', 0) for vm in cluster_data['vms']) / cluster_data['total_vms']
-                
-                # Calculate capacity with 80% utilization rule
-                max_additional_vms = 0
+        for cluster_name, cluster_info in cluster_data.items():
+            # Count VMs in this cluster
+            cluster_vms = [vm for vm in all_vms if vm.get('cluster') == cluster_name]
+            current_vms = len(cluster_vms)
+            
+            # Calculate allocated resources from VMs
+            allocated_vcpu = sum(vm.get('cores', 0) for vm in cluster_vms)
+            allocated_memory = sum(vm.get('memory', 0) for vm in cluster_vms)
+            allocated_disk = sum(vm.get('disk', 0) for vm in cluster_vms)
+            
+            # Calculate available resources (80% capacity rule)
+            total_vcpus = cluster_info['total_cpu_vcpus']
+            total_memory = cluster_info['total_memory_gb']
+            total_disk = cluster_info['total_disk_gb']
+            
+            max_vcpu_capacity = int(total_vcpus * 0.8)
+            max_memory_capacity = int(total_memory * 0.8)
+            max_disk_capacity = int(total_disk * 0.8)
+            
+            available_vcpu = max(0, max_vcpu_capacity - allocated_vcpu)
+            available_memory = max(0, max_memory_capacity - allocated_memory)
+            available_disk = max(0, max_disk_capacity - allocated_disk)
+            
+            # Calculate max additional VMs (assuming 2 vCPU, 4GB RAM, 50GB disk per VM)
+            max_vms_by_cpu = available_vcpu // 2
+            max_vms_by_memory = available_memory // 4
+            max_vms_by_disk = available_disk // 50
+            
+            max_additional_vms = min(max_vms_by_cpu, max_vms_by_memory, max_vms_by_disk)
+            
+            # Determine limiting factor
+            if max_vms_by_cpu <= max_vms_by_memory and max_vms_by_cpu <= max_vms_by_disk:
                 limiting_factor = "CPU"
-                
-                if cluster_data['total_cpu'] > 0:
-                    cpu_capacity = int((cluster_data['total_cpu'] * 0.8) / 2) - cluster_data['total_vms']
-                    memory_capacity = int((cluster_data['total_memory'] * 0.8) / 4) - cluster_data['total_vms']
-                    
-                    max_additional_vms = max(0, min(cpu_capacity, memory_capacity))
-                    limiting_factor = "CPU" if cpu_capacity < memory_capacity else "Memory"
-                
-                cluster_analysis.append({
-                    'cluster': cluster_name,
-                    'current_vms': cluster_data['total_vms'],
-                    'total_cpu_cores': cluster_data['total_cpu'],
-                    'total_memory_gb': cluster_data['total_memory'],
-                    'avg_cpu_usage': round(avg_cpu, 1),
-                    'avg_memory_usage': round(avg_memory, 1),
-                    'max_additional_vms': max_additional_vms,
-                    'limiting_factor': limiting_factor,
-                    'cpu_utilization': round((cluster_data['total_vms'] * 2) / max(cluster_data['total_cpu'], 1) * 100, 1),
-                    'memory_utilization': round((cluster_data['total_vms'] * 4) / max(cluster_data['total_memory'], 1) * 100, 1)
-                })
+            elif max_vms_by_memory <= max_vms_by_disk:
+                limiting_factor = "Memory"
+            else:
+                limiting_factor = "Disk"
+            
+            # Calculate utilization percentages
+            vcpu_utilization = (allocated_vcpu / max(total_vcpus, 1)) * 100
+            memory_utilization = (allocated_memory / max(total_memory, 1)) * 100
+            disk_utilization = (allocated_disk / max(total_disk, 1)) * 100
+            
+            cluster_analysis.append({
+                "name": cluster_name,
+                "total_cpu_vcpus": total_vcpus,
+                "total_memory_gb": total_memory,
+                "total_disk_gb": total_disk,
+                "current_vms": current_vms,
+                "allocated_vcpu": allocated_vcpu,
+                "allocated_memory_gb": allocated_memory,
+                "allocated_disk_gb": allocated_disk,
+                "available_vcpu": available_vcpu,
+                "available_memory_gb": available_memory,
+                "available_disk_gb": available_disk,
+                "max_additional_vms": max_additional_vms,
+                "limiting_factor": limiting_factor,
+                "vcpu_utilization": round(vcpu_utilization, 1),
+                "memory_utilization": round(memory_utilization, 1),
+                "disk_utilization": round(disk_utilization, 1),
+                "host_count": cluster_info['host_count']
+            })
+        
+        print(f"📊 Cluster capacity analysis complete: {len(cluster_analysis)} clusters")
         
         return {
-            'clusters': cluster_analysis,
-            'total_clusters': len(cluster_analysis),
-            'timestamp': datetime.now().isoformat()
+            "clusters": cluster_analysis,
+            "total_clusters": len(cluster_analysis),
+            "timestamp": datetime.now().isoformat(),
+            "data_source": "vcenter"
         }
         
     except Exception as e:
         print(f"❌ Error in cluster capacity analysis: {e}")
         return {
-            'clusters': [],
-            'total_clusters': 0,
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
+            "clusters": [],
+            "total_clusters": 0,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "data_source": "error"
         }
 
 

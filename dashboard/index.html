@@ -2563,8 +2563,13 @@
             console.log(`🔄 Loading capacity data (view: ${this.capacityView}, cluster: ${this.selectedCluster})...`);
             
             if (this.capacityView === 'cluster') {
-              // Load cluster breakdown data
-              const response = await fetch(`${this.apiBaseUrl}/capacity/clusters`);
+              // Load cluster breakdown data with optional cluster filtering
+              let url = `${this.apiBaseUrl}/capacity/clusters`;
+              if (this.selectedCluster && this.selectedCluster !== 'all') {
+                url += `?cluster=${encodeURIComponent(this.selectedCluster)}`;
+              }
+              
+              const response = await fetch(url);
               if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
               }
@@ -2573,14 +2578,16 @@
               // Transform the data to match the expected format
               if (data.clusters && Array.isArray(data.clusters)) {
                 this.clusterCapacityData = data.clusters.map(cluster => ({
-                  cluster_name: cluster.cluster || cluster.cluster_name || 'Unknown',
+                  cluster_name: cluster.name || cluster.cluster_name || 'Unknown',
                   current_vms: cluster.current_vms || 0,
-                  total_cpu_cores: cluster.total_cpu_cores || 0,
+                  total_cpu_cores: cluster.total_cpu_vcpus || cluster.total_cpu_cores || 0,
                   total_memory_gb: Math.round(cluster.total_memory_gb || 0),
-                  cpu_utilization_percent: Math.round(cluster.cpu_utilization || cluster.cpu_utilization_percent || 0),
+                  cpu_utilization_percent: Math.round(cluster.vcpu_utilization || cluster.cpu_utilization_percent || 0),
                   memory_utilization_percent: Math.round(cluster.memory_utilization || cluster.memory_utilization_percent || 0),
                   max_additional_vms: cluster.max_additional_vms || 0,
-                  limiting_factor: cluster.limiting_factor || 'CPU'
+                  limiting_factor: cluster.limiting_factor || 'CPU',
+                  available_vcpu: cluster.available_vcpu || 0,
+                  available_memory_gb: cluster.available_memory_gb || 0
                 }));
                 
                 // Update available clusters for dropdown
