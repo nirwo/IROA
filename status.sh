@@ -57,7 +57,15 @@ if [ -f "frontend.pid" ]; then
     if ps -p $PID > /dev/null 2>&1; then
         print_running "Frontend Server (PID: $PID, port 3000)"
     else
-        print_stopped "Frontend Server (stale PID file)"
+        print_warning "Frontend Server (cleaning stale PID file)"
+        rm -f frontend.pid
+        # Check if something else is running on port 3000
+        if lsof -ti:3000 > /dev/null 2>&1; then
+            PID=$(lsof -ti:3000)
+            print_running "Frontend Server (PID: $PID, port 3000)"
+        else
+            print_stopped "Frontend Server"
+        fi
     fi
 elif lsof -ti:3000 > /dev/null 2>&1; then
     PID=$(lsof -ti:3000)
@@ -96,7 +104,19 @@ fi
 echo ""
 echo "🌍 Access URLs:"
 echo "--------------"
-HOST_IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
+# Get host IP - handle both Linux and macOS
+if command -v hostname >/dev/null 2>&1; then
+    # Try Linux style first
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || hostname -i 2>/dev/null | awk '{print $1}' || ifconfig | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://' || echo "localhost")
+else
+    # Fallback for systems without hostname
+    HOST_IP=$(ifconfig | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://' || echo "localhost")
+fi
+
+# If HOST_IP is empty or just whitespace, use localhost
+if [ -z "$HOST_IP" ] || [ "$HOST_IP" = " " ]; then
+    HOST_IP="localhost"
+fi
 echo "📊 Dashboard: http://$HOST_IP:3000 (or http://localhost:3000)"
 echo "🔧 API: http://$HOST_IP:8001 (or http://localhost:8001)"
 echo "📈 Prometheus: http://$HOST_IP:9090 (or http://localhost:9090)"

@@ -1892,7 +1892,15 @@
           
           // Check API
           try {
-            const apiResponse = await fetch(`${this.apiBaseUrl}/health`, { timeout: 5000 });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const apiResponse = await fetch(`${this.apiBaseUrl}/health`, {
+              signal: controller.signal,
+              headers: { 'Accept': 'application/json' }
+            });
+            
+            clearTimeout(timeoutId);
             this.endpointStatus.api = apiResponse.ok;
             this.apiConnected = apiResponse.ok;
             console.log(`✅ API Status: ${apiResponse.ok ? 'Connected' : 'Disconnected'}`);
@@ -1902,10 +1910,17 @@
             console.error('❌ API Status: Disconnected -', error.message);
           }
           
-          // Check Prometheus
+          // Check Prometheus (via API proxy to avoid CORS)
           try {
-            const prometheusUrl = window.location.protocol + '//' + window.location.hostname + ':9090';
-            const prometheusResponse = await fetch(`${prometheusUrl}/api/v1/query?query=up`, { timeout: 5000 });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const prometheusResponse = await fetch(`${this.apiBaseUrl}/admin/prometheus/status`, {
+              signal: controller.signal,
+              headers: { 'Accept': 'application/json' }
+            });
+            
+            clearTimeout(timeoutId);
             this.endpointStatus.prometheus = prometheusResponse.ok;
             console.log(`✅ Prometheus Status: ${prometheusResponse.ok ? 'Connected' : 'Disconnected'}`);
           } catch (error) {
@@ -1913,9 +1928,17 @@
             console.error('❌ Prometheus Status: Disconnected -', error.message);
           }
           
-          // Check Database (via API)
+          // Check Database (via VMs endpoint as proxy)
           try {
-            const dbResponse = await fetch(`${this.apiBaseUrl}/admin/database/status`, { timeout: 5000 });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const dbResponse = await fetch(`${this.apiBaseUrl}/vms`, {
+              signal: controller.signal,
+              headers: { 'Accept': 'application/json' }
+            });
+            
+            clearTimeout(timeoutId);
             this.endpointStatus.database = dbResponse.ok;
             console.log(`✅ Database Status: ${dbResponse.ok ? 'Connected' : 'Disconnected'}`);
           } catch (error) {
@@ -1923,17 +1946,27 @@
             console.error('❌ Database Status: Disconnected -', error.message);
           }
           
-          // Check vCenter (via saved integrations)
+          // Check vCenter (via VMs endpoint to see if vCenter VMs are available)
           try {
-            const vcenterResponse = await fetch(`${this.apiBaseUrl}/admin/integrations/config`, { timeout: 5000 });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const vcenterResponse = await fetch(`${this.apiBaseUrl}/vcenter/vms`, {
+              signal: controller.signal,
+              headers: { 'Accept': 'application/json' }
+            });
+            
+            clearTimeout(timeoutId);
             if (vcenterResponse.ok) {
-              const data = await vcenterResponse.json();
-              this.endpointStatus.vcenter = data.integrations?.vcenter ? true : false;
+              const vms = await vcenterResponse.json();
+              this.endpointStatus.vcenter = Array.isArray(vms) && vms.length > 0;
+            } else {
+              this.endpointStatus.vcenter = false;
             }
-            console.log(`✅ vCenter Status: ${this.endpointStatus.vcenter ? 'Configured' : 'Not Configured'}`);
+            console.log(`✅ vCenter Status: ${this.endpointStatus.vcenter ? 'Connected with VMs' : 'Not Connected'}`);
           } catch (error) {
             this.endpointStatus.vcenter = false;
-            console.error('❌ vCenter Status: Not Configured -', error.message);
+            console.error('❌ vCenter Status: Not Connected -', error.message);
           }
         },
 

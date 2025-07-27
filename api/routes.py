@@ -949,6 +949,39 @@ async def test_zabbix_connection(request: ConnectionTestRequest):
         print(f"❌ {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
 
+@router.get("/admin/prometheus/status")
+async def get_prometheus_status():
+    """Get Prometheus connection status for dashboard health indicators"""
+    try:
+        import requests
+        prometheus_url = "http://localhost:9090"
+        
+        # Test Prometheus health endpoint
+        response = requests.get(f"{prometheus_url}/-/healthy", timeout=5)
+        
+        if response.status_code == 200:
+            print(f"✅ Prometheus health check successful")
+            return {
+                "status": "connected",
+                "message": "Prometheus is running and healthy",
+                "url": prometheus_url,
+                "response_time_ms": response.elapsed.total_seconds() * 1000,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            print(f"❌ Prometheus health check failed: {response.status_code}")
+            raise HTTPException(status_code=503, detail=f"Prometheus returned status {response.status_code}")
+            
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Prometheus connection failed: Service unavailable")
+        raise HTTPException(status_code=503, detail="Prometheus service is not available")
+    except requests.exceptions.Timeout:
+        print(f"❌ Prometheus connection failed: Timeout")
+        raise HTTPException(status_code=503, detail="Prometheus service timeout")
+    except Exception as e:
+        print(f"❌ Prometheus status check failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Prometheus status check failed: {str(e)}")
+
 @router.post("/admin/prometheus/test")
 async def test_prometheus_connection(request: ConnectionTestRequest):
     # Placeholder for Prometheus connection test
