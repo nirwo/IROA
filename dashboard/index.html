@@ -270,46 +270,72 @@
               </button>
             </div>
             
-            <div v-if="infrastructure.summary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 text-center border border-blue-200">
-                <div class="text-3xl font-bold text-blue-600 mb-2">{{ infrastructure.summary.total_datacenters }}</div>
-                <div class="text-sm font-medium text-blue-700">Datacenters</div>
-                <div class="text-xs text-blue-600 mt-1">Physical locations</div>
+            <div v-if="infrastructure.summary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <!-- Datacenters -->
+              <div @click="showInfraDetails('datacenters')" class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-8 text-center border border-blue-200 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200">
+                <div class="text-4xl font-bold text-blue-600 mb-3">{{ infrastructure.summary.total_datacenters }}</div>
+                <div class="text-lg font-semibold text-blue-700 mb-2">Datacenters</div>
+                <div class="text-sm text-blue-600 mb-3">Physical locations</div>
+                <div class="flex items-center justify-center text-blue-500 text-sm">
+                  <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                  <span>Click for details</span>
+                </div>
               </div>
-              <div class="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 text-center border border-green-200">
-                <div class="text-3xl font-bold text-green-600 mb-2">{{ infrastructure.summary.total_clusters }}</div>
-                <div class="text-sm font-medium text-green-700">Clusters</div>
-                <div class="text-xs text-green-600 mt-1">Compute clusters</div>
+              
+              <!-- Clusters -->
+              <div @click="showInfraDetails('clusters')" class="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-8 text-center border border-green-200 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200">
+                <div class="text-4xl font-bold text-green-600 mb-3">{{ infrastructure.summary.total_clusters }}</div>
+                <div class="text-lg font-semibold text-green-700 mb-2">Clusters</div>
+                <div class="text-sm text-green-600 mb-3">Compute clusters</div>
+                <div class="flex items-center justify-center text-green-500 text-sm">
+                  <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                  <span>Click for details</span>
+                </div>
               </div>
-              <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-6 text-center border border-purple-200">
-                <div class="text-3xl font-bold text-purple-600 mb-2">{{ infrastructure.summary.total_hosts }}</div>
-                <div class="text-sm font-medium text-purple-700">ESXi Hosts</div>
-                <div class="text-xs text-purple-600 mt-1">Physical servers</div>
+              
+              <!-- ESXi Hosts -->
+              <div @click="showInfraDetails('hosts')" class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-8 text-center border border-purple-200 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200">
+                <div class="text-4xl font-bold text-purple-600 mb-3">{{ infrastructure.summary.total_hosts }}</div>
+                <div class="text-lg font-semibold text-purple-700 mb-2">ESXi Hosts</div>
+                <div class="text-sm text-purple-600 mb-3">Physical servers</div>
+                <div class="flex items-center justify-center text-purple-500 text-sm">
+                  <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                  <span>Click for details</span>
+                </div>
               </div>
-              <div class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg p-6 text-center border border-orange-200">
-                <div class="text-3xl font-bold text-orange-600 mb-2">{{ infrastructure.summary.total_datastores }}</div>
-                <div class="text-sm font-medium text-orange-700">Datastores</div>
-                <div class="text-xs text-orange-600 mt-1">Storage systems</div>
+              
+              <!-- Datastores -->
+              <div @click="showInfraDetails('datastores')" class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-8 text-center border border-orange-200 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200">
+                <div class="text-4xl font-bold text-orange-600 mb-3">{{ infrastructure.summary.total_datastores }}</div>
+                <div class="text-lg font-semibold text-orange-700 mb-2">Datastores</div>
+                <div class="text-sm text-orange-600 mb-3">Storage systems</div>
+                <div class="flex items-center justify-center text-orange-500 text-sm">
+                  <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                  <span>Click for details</span>
+                </div>
               </div>
-              <div class="bg-gradient-to-r from-red-50 to-red-100 rounded-lg p-6 text-center border border-red-200">
-                <div class="text-3xl font-bold text-red-600 mb-2">{{ infrastructure.summary.total_vms }}</div>
-                <div class="text-sm font-medium text-red-700">Total VMs</div>
-                <div class="text-xs text-red-600 mt-1">{{ infrastructure.summary.running_vms }} running</div>
+              
+              <!-- Virtual Machines -->
+              <div @click="showInfraDetails('vms')" class="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-8 text-center border border-red-200 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200">
+                <div class="text-4xl font-bold text-red-600 mb-3">{{ infrastructure.summary.total_vms }}</div>
+                <div class="text-lg font-semibold text-red-700 mb-2">Virtual Machines</div>
+                <div class="text-sm text-red-600 mb-3">{{ infrastructure.summary.running_vms }} running</div>
+                <div class="flex items-center justify-center text-red-500 text-sm">
+                  <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                  <span>Click for details</span>
+                </div>
               </div>
-              <div class="bg-gradient-to-r from-teal-50 to-teal-100 rounded-lg p-6 text-center border border-teal-200">
-                <div class="text-3xl font-bold text-teal-600 mb-2">{{ infrastructure.summary.running_vms }}</div>
-                <div class="text-sm font-medium text-teal-700">Running VMs</div>
-                <div class="text-xs text-teal-600 mt-1">Active workloads</div>
-              </div>
-              <div class="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-lg p-6 text-center border border-indigo-200">
-                <div class="text-3xl font-bold text-indigo-600 mb-2">{{ infrastructure.summary.total_cpu_cores }}</div>
-                <div class="text-sm font-medium text-indigo-700">CPU Cores</div>
-                <div class="text-xs text-indigo-600 mt-1">Total compute</div>
-              </div>
-              <div class="bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg p-6 text-center border border-pink-200">
-                <div class="text-3xl font-bold text-pink-600 mb-2">{{ Math.round(infrastructure.summary.total_memory_gb) }}GB</div>
-                <div class="text-sm font-medium text-pink-700">Total Memory</div>
-                <div class="text-xs text-pink-600 mt-1">RAM capacity</div>
+              
+              <!-- Resource Summary -->
+              <div @click="showInfraDetails('resources')" class="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-xl p-8 text-center border border-indigo-200 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200">
+                <div class="text-2xl font-bold text-indigo-600 mb-2">{{ infrastructure.summary.total_cpu_cores }} Cores</div>
+                <div class="text-2xl font-bold text-indigo-600 mb-3">{{ Math.round(infrastructure.summary.total_memory_gb) }}GB RAM</div>
+                <div class="text-lg font-semibold text-indigo-700 mb-2">Total Resources</div>
+                <div class="text-sm text-indigo-600 mb-3">Compute capacity</div>
+                <div class="flex items-center justify-center text-indigo-500 text-sm">
+                  <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                  <span>Click for details</span>
+                </div>
               </div>
             </div>
             
@@ -481,7 +507,30 @@
             <p class="text-gray-600">Analyze infrastructure capacity and plan for future growth</p>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <!-- Cluster Selection -->
+          <div class="mb-6">
+            <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                  <label class="text-sm font-medium text-gray-700">View Capacity By:</label>
+                  <select v-model="capacityView" @change="loadCapacityData" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="overall">Overall Infrastructure</option>
+                    <option value="cluster">By Cluster</option>
+                  </select>
+                </div>
+                <div v-if="capacityView === 'cluster'" class="flex items-center space-x-2">
+                  <label class="text-sm font-medium text-gray-700">Select Cluster:</label>
+                  <select v-model="selectedCluster" @change="loadCapacityData" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Clusters</option>
+                    <option v-for="cluster in availableClusters" :key="cluster" :value="cluster">{{ cluster }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Capacity Overview -->
+          <div v-if="capacityView === 'overall'" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <!-- Current Capacity Overview -->
             <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -495,7 +544,7 @@
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-600">Total Memory (GB)</span>
-                  <span class="font-semibold">{{ capacityData.totalMemory }}</span>
+                  <span class="font-semibold">{{ Math.round(capacityData.totalMemory) }}</span>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-600">Current VMs</span>
@@ -538,6 +587,52 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Cluster Breakdown View -->
+          <div v-if="capacityView === 'cluster'" class="mb-8">
+            <div v-if="clusterCapacityData && clusterCapacityData.length > 0" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div v-for="cluster in clusterCapacityData" :key="cluster.cluster_name" class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <i data-lucide="server" class="w-5 h-5 mr-2 text-blue-500"></i>
+                  {{ cluster.cluster_name }}
+                </h3>
+                <div class="space-y-3">
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">CPU Cores</span>
+                    <span class="font-semibold">{{ cluster.total_cpu_cores }}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">Memory (GB)</span>
+                    <span class="font-semibold">{{ Math.round(cluster.total_memory_gb) }}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">Current VMs</span>
+                    <span class="font-semibold">{{ cluster.current_vms }}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">CPU Usage</span>
+                    <span class="font-semibold text-orange-600">{{ Math.round(cluster.cpu_utilization_percent) }}%</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-600">Memory Usage</span>
+                    <span class="font-semibold text-orange-600">{{ Math.round(cluster.memory_utilization_percent) }}%</span>
+                  </div>
+                  <div class="border-t pt-3 mt-3">
+                    <div class="flex justify-between items-center">
+                      <span class="text-sm font-medium text-green-600">Max Additional VMs</span>
+                      <span class="font-bold text-green-600">{{ cluster.max_additional_vms }}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">Limiting factor: {{ cluster.limiting_factor }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
+              <i data-lucide="server" class="w-12 h-12 text-gray-300 mx-auto mb-4"></i>
+              <h3 class="text-lg font-medium text-gray-900 mb-2">No Cluster Data Available</h3>
+              <p class="text-gray-600">Please sync your vCenter infrastructure to view cluster capacity breakdown.</p>
             </div>
           </div>
 
@@ -684,13 +779,34 @@
             <p class="text-gray-600">View VM profiles and capacity planning with 80% utilization rule</p>
           </div>
 
+          <!-- Profile View Controls -->
           <div class="mb-6">
-            <button @click="loadProfilePreview" :disabled="loading.profiles" 
-                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
-              <div v-if="loading.profiles" class="loading-spinner mr-2"></div>
-              <i v-else data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
-              {{ loading.profiles ? 'Loading...' : 'Refresh Profile Data' }}
-            </button>
+            <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                  <button @click="loadProfilePreview" :disabled="loading.profiles" 
+                          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+                    <div v-if="loading.profiles" class="loading-spinner mr-2"></div>
+                    <i v-else data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+                    {{ loading.profiles ? 'Loading...' : 'Refresh Profile Data' }}
+                  </button>
+                  <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">View By:</label>
+                    <select v-model="profileView" @change="loadProfilePreview" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="overall">Overall Infrastructure</option>
+                      <option value="cluster">By Cluster</option>
+                    </select>
+                  </div>
+                </div>
+                <div v-if="profileView === 'cluster'" class="flex items-center space-x-2">
+                  <label class="text-sm font-medium text-gray-700">Select Cluster:</label>
+                  <select v-model="selectedProfileCluster" @change="loadProfilePreview" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Clusters</option>
+                    <option v-for="cluster in availableClusters" :key="cluster" :value="cluster">{{ cluster }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- System Capacity Overview -->
@@ -709,11 +825,11 @@
                 <div class="text-sm text-gray-500">Total Memory</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-orange-600">{{ profilePreview.system_capacity.cpu_utilization_percent }}%</div>
+                <div class="text-2xl font-bold text-orange-600">{{ Math.round(profilePreview.system_capacity.cpu_utilization_percent) }}%</div>
                 <div class="text-sm text-gray-500">CPU Utilization</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-red-600">{{ profilePreview.system_capacity.memory_utilization_percent }}%</div>
+                <div class="text-2xl font-bold text-red-600">{{ Math.round(profilePreview.system_capacity.memory_utilization_percent) }}%</div>
                 <div class="text-sm text-gray-500">Memory Utilization</div>
               </div>
             </div>
@@ -1117,16 +1233,85 @@
             <p class="text-gray-600">Monitor and manage your virtual infrastructure</p>
           </div>
 
-          <div class="mb-6 flex items-center justify-between">
-            <button @click="loadUnderutilizedVMs" :disabled="loading.vms" 
-                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
-              <div v-if="loading.vms" class="loading-spinner mr-2"></div>
-              <i v-else data-lucide="server" class="w-4 h-4 mr-2"></i>
-              {{ loading.vms ? 'Loading...' : 'Load Underutilized VMs' }}
-            </button>
-            <div class="flex items-center space-x-4">
-              <input v-model="vmSearchTerm" type="text" placeholder="Search VMs..." 
-                     class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <!-- Enhanced VM Filters -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <button @click="loadUnderutilizedVMs" :disabled="loading.vms" 
+                      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center">
+                <div v-if="loading.vms" class="loading-spinner mr-2"></div>
+                <i v-else data-lucide="server" class="w-4 h-4 mr-2"></i>
+                {{ loading.vms ? 'Loading...' : 'Load All VMs' }}
+              </button>
+              <div class="text-sm text-gray-600">
+                Showing {{ filteredVMs.length }} of {{ vms.length }} VMs
+              </div>
+            </div>
+            
+            <!-- Filter Controls -->
+            <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Search Filter -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Search VMs</label>
+                  <input v-model="vmFilters.search" type="text" placeholder="VM name, host, cluster..." 
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <!-- Status Filter -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select v-model="vmFilters.status" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Status</option>
+                    <option value="underutilized">Underutilized</option>
+                    <option value="optimal">Optimal</option>
+                    <option value="overutilized">Overutilized</option>
+                    <option value="running">Running</option>
+                    <option value="stopped">Stopped</option>
+                  </select>
+                </div>
+                
+                <!-- Cluster Filter -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
+                  <select v-model="vmFilters.cluster" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Clusters</option>
+                    <option v-for="cluster in availableClusters" :key="cluster" :value="cluster">{{ cluster }}</option>
+                  </select>
+                </div>
+                
+                <!-- CPU Usage Filter -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">CPU Usage</label>
+                  <select v-model="vmFilters.cpuRange" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All CPU Levels</option>
+                    <option value="low">Low (< 30%)</option>
+                    <option value="medium">Medium (30-70%)</option>
+                    <option value="high">High (> 70%)</option>
+                  </select>
+                </div>
+              </div>
+              
+              <!-- Quick Filter Buttons -->
+              <div class="flex flex-wrap gap-2 mt-4">
+                <button @click="applyQuickFilter('underutilized')" 
+                        :class="{'bg-red-100 text-red-700 border-red-200': vmFilters.quickFilter === 'underutilized'}" 
+                        class="px-3 py-1 text-sm border border-gray-300 rounded-full hover:bg-gray-50 transition-colors">
+                  <i data-lucide="trending-down" class="w-3 h-3 mr-1 inline"></i>Underutilized
+                </button>
+                <button @click="applyQuickFilter('overutilized')" 
+                        :class="{'bg-orange-100 text-orange-700 border-orange-200': vmFilters.quickFilter === 'overutilized'}" 
+                        class="px-3 py-1 text-sm border border-gray-300 rounded-full hover:bg-gray-50 transition-colors">
+                  <i data-lucide="trending-up" class="w-3 h-3 mr-1 inline"></i>Overutilized
+                </button>
+                <button @click="applyQuickFilter('optimal')" 
+                        :class="{'bg-green-100 text-green-700 border-green-200': vmFilters.quickFilter === 'optimal'}" 
+                        class="px-3 py-1 text-sm border border-gray-300 rounded-full hover:bg-gray-50 transition-colors">
+                  <i data-lucide="check-circle" class="w-3 h-3 mr-1 inline"></i>Optimal
+                </button>
+                <button @click="clearFilters()" class="px-3 py-1 text-sm border border-gray-300 rounded-full hover:bg-gray-50 transition-colors">
+                  <i data-lucide="x" class="w-3 h-3 mr-1 inline"></i>Clear All
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1139,9 +1324,16 @@
 
           <!-- VM Cards with Enhanced Error Handling -->
           <div v-if="filteredVMs && filteredVMs.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="(vm, index) in filteredVMs" :key="`vm-${index}-${vm.vm || 'unknown'}`" class="vm-card bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div v-for="(vm, index) in filteredVMs" :key="`vm-${index}-${vm.vm || 'unknown'}`" class="vm-card bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition-shadow">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">{{ vm.vm || 'Unknown VM' }}</h3>
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900">{{ vm.vm || 'Unknown VM' }}</h3>
+                  <div class="flex items-center space-x-2 mt-1">
+                    <span class="text-xs text-gray-500">{{ vm.cluster || 'Unknown Cluster' }}</span>
+                    <span class="text-xs text-gray-400">•</span>
+                    <span class="text-xs text-gray-500">{{ vm.host || 'Unknown Host' }}</span>
+                  </div>
+                </div>
                 <div :class="{
                   'bg-red-100 text-red-800': (vm.cpu || 0) < 30 && (vm.memory_usage || 0) < 50,
                   'bg-yellow-100 text-yellow-800': (vm.cpu || 0) >= 30 && (vm.cpu || 0) < 70,
@@ -1157,7 +1349,7 @@
                     <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
                       <div class="bg-blue-500 h-2 rounded-full" :style="{width: Math.min(100, Math.max(0, getCPUValue(vm))) + '%'}"></div>
                     </div>
-                    <span class="text-sm font-medium">{{ getCPUValue(vm).toFixed(1) }}%</span>
+                    <span class="text-sm font-medium">{{ Math.round(getCPUValue(vm)) }}%</span>
                   </div>
                 </div>
                 <div class="flex justify-between items-center">
@@ -1166,7 +1358,7 @@
                     <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
                       <div class="bg-green-500 h-2 rounded-full" :style="{width: Math.min(100, Math.max(0, getMemoryValue(vm))) + '%'}"></div>
                     </div>
-                    <span class="text-sm font-medium">{{ getMemoryValue(vm).toFixed(1) }}%</span>
+                    <span class="text-sm font-medium">{{ Math.round(getMemoryValue(vm)) }}%</span>
                   </div>
                 </div>
                 <div v-if="vm.details?.disk_usage" class="flex justify-between items-center">
@@ -1175,7 +1367,7 @@
                     <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
                       <div class="bg-purple-500 h-2 rounded-full" :style="{width: Math.min(100, Math.max(0, vm.details.disk_usage || 0)) + '%'}"></div>
                     </div>
-                    <span class="text-sm font-medium">{{ (vm.details.disk_usage || 0).toFixed(1) }}%</span>
+                    <span class="text-sm font-medium">{{ Math.round(vm.details.disk_usage || 0) }}%</span>
                   </div>
                 </div>
               </div>
@@ -1299,6 +1491,19 @@
           notification: null,
           notificationTimeout: null,
           vmSearchTerm: '',
+          vmFilters: {
+            search: '',
+            status: '',
+            cluster: '',
+            cpuRange: '',
+            quickFilter: ''
+          },
+          availableClusters: [],
+          capacityView: 'overall',
+          selectedCluster: '',
+          clusterCapacityData: [],
+          profileView: 'overall',
+          selectedProfileCluster: '',
           recommendations: [],
           underutilizedVMs: [],
           forecast: [],
@@ -1426,10 +1631,49 @@
       },
       computed: {
         filteredVMs() {
-          if (!this.vmSearchTerm) return this.underutilizedVMs;
-          return this.underutilizedVMs.filter(vm => 
-            vm.vm.toLowerCase().includes(this.vmSearchTerm.toLowerCase())
-          );
+          let vms = this.vms || this.underutilizedVMs || [];
+          
+          // Apply search filter
+          if (this.vmFilters.search) {
+            const searchTerm = this.vmFilters.search.toLowerCase();
+            vms = vms.filter(vm => 
+              (vm.vm || '').toLowerCase().includes(searchTerm) ||
+              (vm.host || '').toLowerCase().includes(searchTerm) ||
+              (vm.cluster || '').toLowerCase().includes(searchTerm)
+            );
+          }
+          
+          // Apply status filter
+          if (this.vmFilters.status) {
+            vms = vms.filter(vm => {
+              const status = this.getVMStatus(vm).toLowerCase();
+              return status.includes(this.vmFilters.status.toLowerCase());
+            });
+          }
+          
+          // Apply cluster filter
+          if (this.vmFilters.cluster) {
+            vms = vms.filter(vm => (vm.cluster || '') === this.vmFilters.cluster);
+          }
+          
+          // Apply CPU range filter
+          if (this.vmFilters.cpuRange) {
+            vms = vms.filter(vm => {
+              const cpu = this.getCPUValue(vm);
+              switch (this.vmFilters.cpuRange) {
+                case 'low': return cpu < 30;
+                case 'medium': return cpu >= 30 && cpu <= 70;
+                case 'high': return cpu > 70;
+                default: return true;
+              }
+            });
+          }
+          
+          return vms;
+        },
+        
+        vms() {
+          return this.underutilizedVMs;
         }
       },
       async mounted() {
@@ -1644,6 +1888,9 @@
             // Update stats based on real data
             this.updateStatsFromVMs(sanitizedVMs);
             
+            // Update available clusters for filtering
+            this.updateAvailableClusters();
+            
             const systemVM = sanitizedVMs.find(vm => vm.source === 'prometheus');
             const message = systemVM ? 
               `Found ${sanitizedVMs.length} VMs (including ${systemVM.vm} from Prometheus)` : 
@@ -1846,17 +2093,84 @@
           }
         },
 
+        // Enhanced VM filtering methods
+        applyQuickFilter(filterType) {
+          this.vmFilters.quickFilter = filterType;
+          switch (filterType) {
+            case 'underutilized':
+              this.vmFilters.status = 'underutilized';
+              this.vmFilters.cpuRange = 'low';
+              break;
+            case 'overutilized':
+              this.vmFilters.status = 'overutilized';
+              this.vmFilters.cpuRange = 'high';
+              break;
+            case 'optimal':
+              this.vmFilters.status = 'optimal';
+              this.vmFilters.cpuRange = 'medium';
+              break;
+          }
+        },
+        
+        clearFilters() {
+          this.vmFilters = {
+            search: '',
+            status: '',
+            cluster: '',
+            cpuRange: '',
+            quickFilter: ''
+          };
+        },
+        
+        // Infrastructure deep dive methods
+        showInfraDetails(type) {
+          console.log(`🔍 Showing ${type} details`);
+          // This would typically open a modal or navigate to a detailed view
+          this.showNotification(`Showing ${type} details - Feature coming soon!`, 'info');
+        },
+        
+        // Update available clusters from VM data
+        updateAvailableClusters() {
+          const clusters = new Set();
+          if (this.underutilizedVMs) {
+            this.underutilizedVMs.forEach(vm => {
+              if (vm.cluster) clusters.add(vm.cluster);
+            });
+          }
+          if (this.infrastructure.clusters) {
+            this.infrastructure.clusters.forEach(cluster => {
+              if (cluster.name) clusters.add(cluster.name);
+            });
+          }
+          this.availableClusters = Array.from(clusters).sort();
+        },
+
         // Capacity Planner methods
         async loadCapacityData() {
           this.loading.capacity = true;
           try {
-            const response = await fetch(`${this.apiBaseUrl}/capacity/analysis`);
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
+            let endpoint = `${this.apiBaseUrl}/capacity/analysis`;
+            
+            // Load cluster breakdown if cluster view is selected
+            if (this.capacityView === 'cluster') {
+              endpoint = `${this.apiBaseUrl}/capacity/clusters`;
+              const response = await fetch(endpoint);
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+              const data = await response.json();
+              this.clusterCapacityData = data.clusters || [];
+              this.showNotification('Cluster capacity analysis updated successfully!', 'success');
+            } else {
+              // Load overall capacity data
+              const response = await fetch(endpoint);
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+              const data = await response.json();
+              this.capacityData = data;
+              this.showNotification('Capacity analysis updated successfully!', 'success');
             }
-            const data = await response.json();
-            this.capacityData = data;
-            this.showNotification('Capacity analysis updated successfully!', 'success');
           } catch (error) {
             console.error('Failed to load capacity data:', error);
             // Fallback to mock data for demonstration
