@@ -36,24 +36,78 @@ print_error() {
 stop_frontend() {
     print_status "Stopping frontend server..."
     
+    local stopped=false
+    
+    # First try to stop using PID file
     if [ -f "frontend.pid" ]; then
         PID=$(cat frontend.pid)
         if ps -p $PID > /dev/null 2>&1; then
-            kill $PID
-            print_success "Frontend server stopped (PID: $PID)"
+            print_status "Stopping frontend server (PID: $PID)..."
+            kill $PID 2>/dev/null || true
+            
+            # Wait for graceful shutdown
+            for i in {1..10}; do
+                if ! ps -p $PID > /dev/null 2>&1; then
+                    print_success "Frontend server stopped gracefully (PID: $PID)"
+                    stopped=true
+                    break
+                fi
+                sleep 1
+            done
+            
+            # Force kill if still running
+            if ! $stopped && ps -p $PID > /dev/null 2>&1; then
+                print_warning "Force killing frontend server (PID: $PID)..."
+                kill -9 $PID 2>/dev/null || true
+                sleep 2
+                if ! ps -p $PID > /dev/null 2>&1; then
+                    print_success "Frontend server force stopped (PID: $PID)"
+                    stopped=true
+                fi
+            fi
         else
-            print_warning "Frontend server was not running"
+            print_warning "Frontend server PID file exists but process not running"
         fi
         rm -f frontend.pid
     else
         print_warning "No frontend PID file found"
-        
-        # Try to find and kill any HTTP servers on port 3000
-        PIDS=$(lsof -ti:3000 2>/dev/null || true)
-        if [ ! -z "$PIDS" ]; then
-            echo $PIDS | xargs kill 2>/dev/null || true
-            print_success "Stopped processes on port 3000"
+    fi
+    
+    # Try to find and kill any remaining HTTP servers on port 3000
+    PIDS=$(lsof -ti:3000 2>/dev/null || true)
+    if [ ! -z "$PIDS" ]; then
+        print_status "Found processes on port 3000: $PIDS"
+        for pid in $PIDS; do
+            if ps -p $pid > /dev/null 2>&1; then
+                print_status "Stopping process $pid on port 3000..."
+                kill $pid 2>/dev/null || true
+                sleep 2
+                
+                # Force kill if still running
+                if ps -p $pid > /dev/null 2>&1; then
+                    print_warning "Force killing process $pid..."
+                    kill -9 $pid 2>/dev/null || true
+                    sleep 1
+                fi
+                
+                if ! ps -p $pid > /dev/null 2>&1; then
+                    print_success "Stopped process $pid on port 3000"
+                    stopped=true
+                fi
+            fi
+        done
+    fi
+    
+    # Verify port 3000 is free
+    if ! lsof -ti:3000 > /dev/null 2>&1; then
+        if $stopped; then
+            print_success "Frontend server stopped successfully"
+        else
+            print_success "Port 3000 is free"
         fi
+    else
+        print_error "Failed to stop all processes on port 3000"
+        return 1
     fi
 }
 
@@ -89,17 +143,62 @@ stop_docker_services() {
 
 # Stop all processes
 stop_all_processes() {
-    print_status "Stopping all IROA processes..."
+    print_status "Force stopping all IROA processes..."
     
     # Stop processes on known ports
     for port in 3000 8001 9090; do
         PIDS=$(lsof -ti:$port 2>/dev/null || true)
         if [ ! -z "$PIDS" ]; then
-            print_status "Stopping processes on port $port..."
-            echo $PIDS | xargs kill 2>/dev/null || true
-            print_success "Stopped processes on port $port"
+            print_status "Force stopping processes on port $port: $PIDS"
+            for pid in $PIDS; do
+                if ps -p $pid > /dev/null 2>&1; then
+                    # Try graceful kill first
+                    kill $pid 2>/dev/null || true
+                    sleep 2
+                    
+                    # Force kill if still running
+                    if ps -p $pid > /dev/null 2>&1; then
+                        print_warning "Force killing process $pid on port $port..."
+                        kill -9 $pid 2>/dev/null || true
+                        sleep 1
+                    fi
+                    
+                    if ! ps -p $pid > /dev/null 2>&1; then
+                        print_success "Stopped process $pid on port $port"
+                    else
+                        print_error "Failed to stop process $pid on port $port"
+                    fi
+                fi
+            done
+        else
+            print_status "No processes found on port $port"
         fi
     done
+    
+    # Also look for common IROA process names
+    print_status "Checking for IROA-related processes..."
+    IROA_PIDS=$(pgrep -f "iroa\|http-server\|python.*http.server" 2>/dev/null || true)
+    if [ ! -z "$IROA_PIDS" ]; then
+        print_status "Found IROA-related processes: $IROA_PIDS"
+        for pid in $IROA_PIDS; do
+            if ps -p $pid > /dev/null 2>&1; then
+                PROCESS_INFO=$(ps -p $pid -o comm= 2>/dev/null || echo "unknown")
+                print_status "Stopping IROA process $pid ($PROCESS_INFO)..."
+                kill $pid 2>/dev/null || true
+                sleep 2
+                
+                if ps -p $pid > /dev/null 2>&1; then
+                    print_warning "Force killing IROA process $pid..."
+                    kill -9 $pid 2>/dev/null || true
+                    sleep 1
+                fi
+                
+                if ! ps -p $pid > /dev/null 2>&1; then
+                    print_success "Stopped IROA process $pid"
+                fi
+            fi
+        done
+    fi
 }
 
 # Clean up log files
@@ -111,11 +210,41 @@ cleanup_logs() {
     fi
 }
 
+# Verify system is stopped
+verify_shutdown() {
+    print_status "Verifying system shutdown..."
+    
+    local all_stopped=true
+    
+    # Check ports
+    for port in 3000 8001 9090; do
+        if lsof -ti:$port > /dev/null 2>&1; then
+            print_warning "Port $port is still in use"
+            all_stopped=false
+        fi
+    done
+    
+    # Check Docker containers
+    if docker ps --format "table {{.Names}}" | grep -E "iroa-api|iroa-prometheus" > /dev/null 2>&1; then
+        print_warning "Some Docker containers are still running"
+        all_stopped=false
+    fi
+    
+    if $all_stopped; then
+        print_success "All IROA services have been stopped"
+        return 0
+    else
+        print_error "Some services may still be running"
+        return 1
+    fi
+}
+
 # Main execution
 main() {
     echo "🔧 IROA System Shutdown"
     echo "======================="
     
+    # Stop services in order
     stop_frontend
     stop_docker_services "$1"
     
@@ -125,12 +254,22 @@ main() {
     
     cleanup_logs "$1"
     
+    # Verify shutdown
     echo ""
-    echo "✅ IROA System Stopped Successfully!"
-    echo "===================================="
-    echo ""
-    echo "🚀 To start the system again, run: ./start.sh"
-    echo ""
+    if verify_shutdown; then
+        echo "✅ IROA System Stopped Successfully!"
+        echo "===================================="
+        echo ""
+        echo "🚀 To start the system again, run: ./start.sh"
+        echo ""
+    else
+        echo "⚠️  IROA System Shutdown Completed with Warnings"
+        echo "==============================================="
+        echo ""
+        echo "Some processes may still be running. Use --force flag to force stop all processes."
+        echo "Run: $0 --force"
+        echo ""
+    fi
 }
 
 # Handle script arguments
