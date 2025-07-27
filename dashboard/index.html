@@ -2259,8 +2259,82 @@
         // Infrastructure deep dive methods
         showInfraDetails(type) {
           console.log(`🔍 Showing ${type} details`);
-          // This would typically open a modal or navigate to a detailed view
-          this.showNotification(`Showing ${type} details - Feature coming soon!`, 'info');
+          
+          // Implement real infrastructure deep dive functionality
+          switch (type) {
+            case 'datacenters':
+              if (this.infrastructure.datacenters && this.infrastructure.datacenters.length > 0) {
+                const details = this.infrastructure.datacenters.map(dc => 
+                  `${dc.name || 'Unknown'} (${dc.clusters || 0} clusters, ${dc.hosts || 0} hosts)`
+                ).join(', ');
+                this.showNotification(`Datacenters: ${details}`, 'success');
+              } else {
+                this.showNotification('No datacenter information available. Please sync vCenter first.', 'warning');
+              }
+              break;
+              
+            case 'clusters':
+              if (this.infrastructure.clusters && this.infrastructure.clusters.length > 0) {
+                const details = this.infrastructure.clusters.map(cluster => 
+                  `${cluster.name || 'Unknown'} (${cluster.hosts || 0} hosts, ${cluster.vms || 0} VMs)`
+                ).join(', ');
+                this.showNotification(`Clusters: ${details}`, 'success');
+              } else {
+                this.showNotification('No cluster information available. Please sync vCenter first.', 'warning');
+              }
+              break;
+              
+            case 'hosts':
+              if (this.infrastructure.hosts && this.infrastructure.hosts.length > 0) {
+                const details = this.infrastructure.hosts.map(host => 
+                  `${host.name || 'Unknown'} (${Math.round(host.cpu_cores || 0)} cores, ${Math.round(host.memory_gb || 0)}GB)`
+                ).join(', ');
+                this.showNotification(`Hosts: ${details}`, 'success');
+              } else {
+                this.showNotification('No host information available. Please sync vCenter first.', 'warning');
+              }
+              break;
+              
+            case 'datastores':
+              if (this.infrastructure.datastores && this.infrastructure.datastores.length > 0) {
+                const details = this.infrastructure.datastores.map(ds => 
+                  `${ds.name || 'Unknown'} (${Math.round(ds.capacity_gb || 0)}GB total, ${Math.round(ds.free_gb || 0)}GB free)`
+                ).join(', ');
+                this.showNotification(`Datastores: ${details}`, 'success');
+              } else {
+                this.showNotification('No datastore information available. Please sync vCenter first.', 'warning');
+              }
+              break;
+              
+            case 'vms':
+              if (this.underutilizedVMs && this.underutilizedVMs.length > 0) {
+                const runningVMs = this.underutilizedVMs.filter(vm => vm.status === 'running').length;
+                const totalVMs = this.underutilizedVMs.length;
+                const clusters = [...new Set(this.underutilizedVMs.map(vm => vm.cluster).filter(Boolean))];
+                this.showNotification(`VMs: ${runningVMs}/${totalVMs} running across ${clusters.length} clusters: ${clusters.join(', ')}`, 'success');
+              } else {
+                this.showNotification('No VM information available. Please load VMs first.', 'warning');
+              }
+              break;
+              
+            case 'resources':
+              const summary = this.infrastructure.summary;
+              if (summary && (summary.total_cpu_cores > 0 || summary.total_memory_gb > 0)) {
+                const resourceDetails = [
+                  `CPU: ${Math.round(summary.total_cpu_cores || 0)} cores`,
+                  `Memory: ${Math.round(summary.total_memory_gb || 0)}GB`,
+                  `Storage: ${Math.round(summary.total_storage_gb || 0)}GB total`,
+                  `Used: ${Math.round(summary.used_storage_gb || 0)}GB`
+                ].join(', ');
+                this.showNotification(`Resources: ${resourceDetails}`, 'success');
+              } else {
+                this.showNotification('No resource information available. Please sync vCenter first.', 'warning');
+              }
+              break;
+              
+            default:
+              this.showNotification(`${type} details - Feature implementation in progress`, 'info');
+          }
         },
         
         // Update available clusters from VM data
@@ -2283,27 +2357,59 @@
         async loadCapacityData() {
           this.loading.capacity = true;
           try {
-            let endpoint = `${this.apiBaseUrl}/capacity/analysis`;
+            console.log(`🔄 Loading capacity data (view: ${this.capacityView}, cluster: ${this.selectedCluster})...`);
             
-            // Load cluster breakdown if cluster view is selected
             if (this.capacityView === 'cluster') {
-              endpoint = `${this.apiBaseUrl}/capacity/clusters`;
-              const response = await fetch(endpoint);
+              // Load cluster breakdown data
+              const response = await fetch(`${this.apiBaseUrl}/capacity/clusters`);
               if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
               }
               const data = await response.json();
-              this.clusterCapacityData = data.clusters || [];
-              this.showNotification('Cluster capacity analysis updated successfully!', 'success');
+              
+              // Transform the data to match the expected format
+              if (data.clusters && Array.isArray(data.clusters)) {
+                this.clusterCapacityData = data.clusters.map(cluster => ({
+                  cluster_name: cluster.cluster || cluster.cluster_name || 'Unknown',
+                  current_vms: cluster.current_vms || 0,
+                  total_cpu_cores: cluster.total_cpu_cores || 0,
+                  total_memory_gb: Math.round(cluster.total_memory_gb || 0),
+                  cpu_utilization_percent: Math.round(cluster.cpu_utilization || cluster.cpu_utilization_percent || 0),
+                  memory_utilization_percent: Math.round(cluster.memory_utilization || cluster.memory_utilization_percent || 0),
+                  max_additional_vms: cluster.max_additional_vms || 0,
+                  limiting_factor: cluster.limiting_factor || 'CPU'
+                }));
+                
+                // Update available clusters for dropdown
+                this.availableClusters = this.clusterCapacityData.map(c => c.cluster_name);
+                
+                console.log(`✅ Loaded capacity data for ${this.clusterCapacityData.length} clusters`);
+                this.showNotification(`Loaded capacity analysis for ${this.clusterCapacityData.length} clusters`, 'success');
+              } else {
+                console.warn('⚠️ No cluster capacity data available');
+                this.clusterCapacityData = [];
+                this.showNotification('No cluster capacity data available', 'warning');
+              }
             } else {
               // Load overall capacity data
-              const response = await fetch(endpoint);
+              const response = await fetch(`${this.apiBaseUrl}/capacity/analysis`);
               if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
               }
               const data = await response.json();
-              this.capacityData = data;
-              this.showNotification('Capacity analysis updated successfully!', 'success');
+              
+              this.capacityData = {
+                totalCPU: Math.round(data.total_cpu_cores || 0),
+                totalMemory: Math.round(data.total_memory_gb || 0),
+                usedCPU: Math.round(data.cpu_utilization_percent || 0),
+                usedMemory: Math.round(data.memory_utilization_percent || 0),
+                maxVMs: data.max_additional_vms || 0,
+                currentVMs: data.current_vms || 0,
+                recommendations: data.recommendations || []
+              };
+              
+              console.log('✅ Loaded overall capacity data:', this.capacityData);
+              this.showNotification('Overall capacity analysis updated successfully!', 'success');
             }
           } catch (error) {
             console.error('Failed to load capacity data:', error);
@@ -2663,13 +2769,50 @@
         async loadProfilePreview() {
           this.loading.profiles = true;
           try {
-            const response = await fetch(`${this.apiBaseUrl}/profiles/preview`);
+            console.log(`🔄 Loading profile preview (view: ${this.profileView}, cluster: ${this.selectedProfileCluster})...`);
+            
+            let endpoint = `${this.apiBaseUrl}/profiles/preview`;
+            
+            // Add cluster parameter if cluster view is selected
+            if (this.profileView === 'cluster' && this.selectedProfileCluster) {
+              endpoint += `?cluster=${encodeURIComponent(this.selectedProfileCluster)}`;
+            }
+            
+            const response = await fetch(endpoint);
             if (response.ok) {
               const data = await response.json();
+              
+              // Transform data to ensure integer values
+              if (data.system_capacity) {
+                data.system_capacity.total_cpu_cores = Math.round(data.system_capacity.total_cpu_cores || 0);
+                data.system_capacity.total_memory_gb = Math.round(data.system_capacity.total_memory_gb || 0);
+                data.system_capacity.cpu_utilization_percent = Math.round(data.system_capacity.cpu_utilization_percent || 0);
+                data.system_capacity.memory_utilization_percent = Math.round(data.system_capacity.memory_utilization_percent || 0);
+              }
+              
+              if (data.profile_analysis && Array.isArray(data.profile_analysis)) {
+                data.profile_analysis = data.profile_analysis.map(profile => ({
+                  ...profile,
+                  current_count: Math.round(profile.current_count || 0),
+                  max_additional: Math.round(profile.max_additional || 0),
+                  max_total_possible: Math.round(profile.max_total_possible || 0),
+                  cpu_per_vm: Math.round(profile.cpu_per_vm || 0),
+                  memory_per_vm: Math.round(profile.memory_per_vm || 0),
+                  disk_per_vm: Math.round(profile.disk_per_vm || 0),
+                  profile_cpu_usage_percent: Math.round(profile.profile_cpu_usage_percent || 0),
+                  profile_memory_usage_percent: Math.round(profile.profile_memory_usage_percent || 0)
+                }));
+              }
+              
               this.profilePreview = data;
-              this.showNotification('Profile preview loaded successfully', 'success');
+              
+              const clusterMsg = this.profileView === 'cluster' && this.selectedProfileCluster ? 
+                ` for cluster: ${this.selectedProfileCluster}` : '';
+              
+              console.log('✅ Profile preview loaded successfully:', data);
+              this.showNotification(`Profile preview loaded successfully${clusterMsg}`, 'success');
             } else {
-              throw new Error('Failed to load profile preview');
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
           } catch (error) {
             console.error('Error loading profile preview:', error);
