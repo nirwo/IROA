@@ -2293,19 +2293,44 @@ async def get_profile_preview(cluster: str = None):
             })
             profile_mapping[profile_key]["current_count"] += 1
         
-        # Get actual system resources (available cores and free memory)
-        system_cpu_count = psutil.cpu_count()  # Total CPU cores available
-        system_memory_total = psutil.virtual_memory().total / (1024**3)  # Total memory in GB
-        system_memory_available = psutil.virtual_memory().available / (1024**3)  # Available memory in GB
+        # Get vCenter cluster resources from inventory cache
+        global vcenter_inventory_cache
+        
+        # Calculate total cluster resources from vCenter ESX hosts
+        cluster_total_cpu = 0
+        cluster_total_memory = 0
+        cluster_host_count = 0
+        
+        if vcenter_inventory_cache and "hosts" in vcenter_inventory_cache:
+            # Filter hosts by selected cluster if specified
+            if cluster:
+                cluster_hosts = [host for host in vcenter_inventory_cache["hosts"] if host.get('cluster') == cluster]
+                print(f"🏗️ Found {len(cluster_hosts)} ESX hosts in cluster '{cluster}'")
+            else:
+                cluster_hosts = vcenter_inventory_cache["hosts"]
+                print(f"🏗️ Found {len(cluster_hosts)} ESX hosts across all clusters")
+            
+            # Aggregate CPU cores and memory from all ESX hosts in the cluster
+            for host in cluster_hosts:
+                cluster_total_cpu += host.get('cpu_cores', 0)
+                cluster_total_memory += host.get('memory_gb', 0)
+                cluster_host_count += 1
+                print(f"   📡 {host.get('name', 'Unknown')}: {host.get('cpu_cores', 0)} cores, {host.get('memory_gb', 0)}GB")
+        
+        # Fallback to local system resources if no vCenter data
+        if cluster_total_cpu == 0 or cluster_total_memory == 0:
+            print("⚠️ No vCenter cluster data found, falling back to local system resources")
+            cluster_total_cpu = psutil.cpu_count()
+            cluster_total_memory = psutil.virtual_memory().total / (1024**3)
         
         # Calculate cluster resource allocation and usage
         cluster_allocated_cpu = sum([vm.get('cores', 0) for vm in cluster_vms])  # All VMs (running + stopped)
         cluster_allocated_memory = sum([vm.get('memory', 0) for vm in cluster_vms])  # All VMs (running + stopped)
         cluster_allocated_disk = sum([vm.get('disk', vm.get('disk_gb', 100)) for vm in cluster_vms])
         
-        # For capacity planning, use actual system resources with 80% safety rule
-        max_cluster_cpu = int(system_cpu_count * 0.8)  # 80% of total CPU cores
-        max_cluster_memory = int(system_memory_total * 0.8)  # 80% of total memory
+        # For capacity planning, use vCenter cluster resources with 80% safety rule
+        max_cluster_cpu = int(cluster_total_cpu * 0.8)  # 80% of total cluster CPU cores
+        max_cluster_memory = int(cluster_total_memory * 0.8)  # 80% of total cluster memory
         max_cluster_disk = int(cluster_allocated_disk * 2 * 0.8)  # Conservative storage expansion
         
         # Calculate remaining capacity based on available resources
@@ -2314,7 +2339,10 @@ async def get_profile_preview(cluster: str = None):
         remaining_disk = max_cluster_disk - cluster_allocated_disk
         
         print(f"🔧 Cluster Capacity: CPU {cluster_allocated_cpu}/{max_cluster_cpu}, Memory {cluster_allocated_memory}/{max_cluster_memory}GB, Disk {cluster_allocated_disk}/{max_cluster_disk}GB")
-        print(f"💾 System Resources: {system_cpu_count} cores total, {system_memory_available:.1f}GB available memory")
+        print(f"💾 Cluster Resources: {cluster_total_cpu} cores total, {cluster_total_memory:.1f}GB total memory from {cluster_host_count} ESX hosts")
+        
+        # Calculate available memory (total cluster memory - allocated memory)
+        cluster_available_memory = cluster_total_memory - cluster_allocated_memory
         
         # Calculate how many more VMs of each discovered profile can be created
         profile_analysis = []
@@ -2371,18 +2399,19 @@ async def get_profile_preview(cluster: str = None):
         return {
             "cluster_name": cluster or "All Clusters",
             "cluster_capacity": {
-                "total_cpu_cores": system_cpu_count,
-                "total_memory_gb": round(system_memory_total, 1),
+                "total_cpu_cores": cluster_total_cpu,
+                "total_memory_gb": round(cluster_total_memory, 1),
                 "total_disk_gb": max_cluster_disk,
                 "max_cpu_capacity_80_percent": max_cluster_cpu,
                 "max_memory_capacity_80_percent": max_cluster_memory,
                 "current_cpu_allocated": cluster_allocated_cpu,
                 "current_memory_allocated": round(cluster_allocated_memory, 1),
                 "current_disk_allocated": cluster_allocated_disk,
-                "available_memory_gb": round(system_memory_available, 1),
+                "available_memory_gb": round(cluster_available_memory, 1),
                 "remaining_cpu": remaining_cpu,
                 "remaining_memory": remaining_memory,
                 "remaining_disk": remaining_disk,
+                "cluster_host_count": cluster_host_count,
                 "cpu_allocation_percent": round((cluster_allocated_cpu / max_cluster_cpu) * 100, 1) if max_cluster_cpu > 0 else 0,
                 "memory_allocation_percent": round((cluster_allocated_memory / max_cluster_memory) * 100, 1) if max_cluster_memory > 0 else 0,
                 "disk_allocation_percent": round((cluster_allocated_disk / max_cluster_disk) * 100, 1) if max_cluster_disk > 0 else 0
