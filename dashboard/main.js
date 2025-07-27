@@ -1184,6 +1184,72 @@ const app = createApp({
               <p class="text-gray-600">Manage integrations and monitor system health</p>
             </div>
             
+            <!-- Sync Status Overview -->
+            <div class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div v-for="(syncData, type) in adminData.syncStatus" :key="type" class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <span class="text-lg">
+                        {{ type === 'vcenter' ? '🏢' : type === 'zabbix' ? '📊' : '🔥' }}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 class="font-semibold capitalize">{{ type }}</h3>
+                      <div class="flex items-center space-x-2">
+                        <div :class="[
+                          'w-2 h-2 rounded-full',
+                          syncData.connected ? 'bg-green-500' : 'bg-gray-400'
+                        ]"></div>
+                        <span class="text-sm text-gray-600">
+                          {{ syncData.connected ? 'Connected' : 'Disconnected' }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="text-right">
+                    <div v-if="syncData.syncing" class="flex items-center space-x-2">
+                      <div class="loading-spinner"></div>
+                      <span class="text-sm text-blue-600">Syncing</span>
+                    </div>
+                    <div v-else-if="syncData.autoSync" class="text-sm text-green-600">Auto-sync ON</div>
+                    <div v-else class="text-sm text-gray-500">Manual sync</div>
+                  </div>
+                </div>
+                
+                <div class="space-y-2">
+                  <div v-if="syncData.lastSync" class="text-xs text-gray-500">
+                    Last sync: {{ new Date(syncData.lastSync).toLocaleString() }}
+                  </div>
+                  <div v-else class="text-xs text-gray-500">
+                    Never synced
+                  </div>
+                  
+                  <div v-if="syncData.syncing" class="w-full bg-gray-200 rounded-full h-1.5">
+                    <div 
+                      class="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                      :style="{ width: syncData.syncProgress + '%' }"
+                    ></div>
+                  </div>
+                  
+                  <div v-if="syncData.errors.length" class="text-xs text-red-600">
+                    {{ syncData.errors.length }} error(s)
+                  </div>
+                </div>
+                
+                <div class="mt-4 flex space-x-2">
+                  <button 
+                    @click="startSync(type)"
+                    :disabled="!syncData.connected || syncData.syncing"
+                    class="flex-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {{ syncData.syncing ? 'Syncing...' : 'Sync Now' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
             <!-- Integration Selection -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               <div class="lg:col-span-1">
@@ -1300,6 +1366,44 @@ const app = createApp({
                 <!-- vCenter Integration -->
                 <div v-if="adminData.selectedIntegration === 'vcenter'" class="bg-white rounded-xl shadow-sm p-6">
                   <h3 class="text-lg font-semibold mb-4">🏢 VMware vCenter Integration</h3>
+                  
+                  <!-- Connection Status -->
+                  <div class="mb-6 p-4 rounded-lg" :class="[
+                    adminData.syncStatus.vcenter.connected ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+                  ]">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-2">
+                        <div :class="[
+                          'w-3 h-3 rounded-full',
+                          adminData.syncStatus.vcenter.connected ? 'bg-green-500' : 'bg-gray-400'
+                        ]"></div>
+                        <span class="font-medium">
+                          {{ adminData.syncStatus.vcenter.connected ? 'Connected' : 'Not Connected' }}
+                        </span>
+                      </div>
+                      <div v-if="adminData.syncStatus.vcenter.lastSync" class="text-sm text-gray-600">
+                        Last sync: {{ new Date(adminData.syncStatus.vcenter.lastSync).toLocaleString() }}
+                      </div>
+                    </div>
+                    
+                    <!-- Sync Progress -->
+                    <div v-if="adminData.syncStatus.vcenter.syncing" class="mt-3">
+                      <div class="flex justify-between text-sm mb-1">
+                        <span>Synchronizing...</span>
+                        <span>{{ adminData.syncStatus.vcenter.syncProgress }}%</span>
+                      </div>
+                      <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          :style="{ width: adminData.syncStatus.vcenter.syncProgress + '%' }"
+                        ></div>
+                      </div>
+                      <div class="text-xs text-gray-600 mt-1">
+                        {{ adminData.syncStatus.vcenter.syncedVMs }} / {{ adminData.syncStatus.vcenter.totalVMs }} VMs processed
+                      </div>
+                    </div>
+                  </div>
+                  
                   <form @submit.prevent="testConnection('vcenter')" class="space-y-4">
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">vCenter Host</label>
@@ -1313,15 +1417,113 @@ const app = createApp({
                       <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
                       <input id="vcenter-password" v-model="adminData.connectionForms.vcenter.password" type="password" placeholder="Enter vCenter password" autocomplete="current-password" spellcheck="false" @input="debugCredentialInput('password', $event)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                      Test Connection & Ingest
-                    </button>
+                    
+                    <!-- Connection Actions -->
+                    <div class="flex space-x-3">
+                      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Test Connection
+                      </button>
+                      <button 
+                        type="button"
+                        @click="startSync('vcenter')"
+                        :disabled="!adminData.syncStatus.vcenter.connected || adminData.syncStatus.vcenter.syncing"
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {{ adminData.syncStatus.vcenter.syncing ? 'Syncing...' : 'Start Sync' }}
+                      </button>
+                      <button 
+                        v-if="adminData.syncStatus.vcenter.syncing"
+                        type="button"
+                        @click="stopSync('vcenter')"
+                        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                      >
+                        Stop Sync
+                      </button>
+                    </div>
                   </form>
+                  
+                  <!-- Auto-Sync Settings -->
+                  <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3">Auto-Sync Settings</h4>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-3">
+                        <label class="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            :checked="adminData.syncStatus.vcenter.autoSync"
+                            @change="toggleAutoSync('vcenter')"
+                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          >
+                          <span class="ml-2 text-sm text-gray-700">Enable automatic synchronization</span>
+                        </label>
+                      </div>
+                      <div class="flex items-center space-x-2">
+                        <label class="text-sm text-gray-600">Interval:</label>
+                        <select 
+                          v-model="adminData.syncStatus.vcenter.syncInterval"
+                          class="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option :value="60">1 minute</option>
+                          <option :value="300">5 minutes</option>
+                          <option :value="900">15 minutes</option>
+                          <option :value="3600">1 hour</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Sync Errors -->
+                  <div v-if="adminData.syncStatus.vcenter.errors.length" class="mt-4">
+                    <h4 class="text-sm font-medium text-red-900 mb-2">Sync Errors</h4>
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div v-for="(error, index) in adminData.syncStatus.vcenter.errors" :key="index" class="text-sm text-red-700">
+                        • {{ error }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 <!-- Zabbix Integration -->
                 <div v-if="adminData.selectedIntegration === 'zabbix'" class="bg-white rounded-xl shadow-sm p-6">
                   <h3 class="text-lg font-semibold mb-4">📊 Zabbix Integration</h3>
+                  
+                  <!-- Connection Status -->
+                  <div class="mb-6 p-4 rounded-lg" :class="[
+                    adminData.syncStatus.zabbix.connected ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+                  ]">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-2">
+                        <div :class="[
+                          'w-3 h-3 rounded-full',
+                          adminData.syncStatus.zabbix.connected ? 'bg-green-500' : 'bg-gray-400'
+                        ]"></div>
+                        <span class="font-medium">
+                          {{ adminData.syncStatus.zabbix.connected ? 'Connected' : 'Not Connected' }}
+                        </span>
+                      </div>
+                      <div v-if="adminData.syncStatus.zabbix.lastSync" class="text-sm text-gray-600">
+                        Last sync: {{ new Date(adminData.syncStatus.zabbix.lastSync).toLocaleString() }}
+                      </div>
+                    </div>
+                    
+                    <!-- Sync Progress -->
+                    <div v-if="adminData.syncStatus.zabbix.syncing" class="mt-3">
+                      <div class="flex justify-between text-sm mb-1">
+                        <span>Synchronizing metrics...</span>
+                        <span>{{ adminData.syncStatus.zabbix.syncProgress }}%</span>
+                      </div>
+                      <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          :style="{ width: adminData.syncStatus.zabbix.syncProgress + '%' }"
+                        ></div>
+                      </div>
+                      <div class="text-xs text-gray-600 mt-1">
+                        {{ adminData.syncStatus.zabbix.syncedMetrics }} / {{ adminData.syncStatus.zabbix.totalMetrics }} metrics processed
+                      </div>
+                    </div>
+                  </div>
+                  
                   <form @submit.prevent="testConnection('zabbix')" class="space-y-4">
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">Zabbix API URL</label>
@@ -1335,15 +1537,113 @@ const app = createApp({
                       <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
                       <input id="zabbix-password" v-model="adminData.connectionForms.zabbix.password" type="password" placeholder="Enter Zabbix password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="current-password">
                     </div>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                      Test Connection & Ingest
-                    </button>
+                    
+                    <!-- Connection Actions -->
+                    <div class="flex space-x-3">
+                      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Test Connection
+                      </button>
+                      <button 
+                        type="button"
+                        @click="startSync('zabbix')"
+                        :disabled="!adminData.syncStatus.zabbix.connected || adminData.syncStatus.zabbix.syncing"
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {{ adminData.syncStatus.zabbix.syncing ? 'Syncing...' : 'Start Sync' }}
+                      </button>
+                      <button 
+                        v-if="adminData.syncStatus.zabbix.syncing"
+                        type="button"
+                        @click="stopSync('zabbix')"
+                        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                      >
+                        Stop Sync
+                      </button>
+                    </div>
                   </form>
+                  
+                  <!-- Auto-Sync Settings -->
+                  <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3">Auto-Sync Settings</h4>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-3">
+                        <label class="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            :checked="adminData.syncStatus.zabbix.autoSync"
+                            @change="toggleAutoSync('zabbix')"
+                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          >
+                          <span class="ml-2 text-sm text-gray-700">Enable automatic synchronization</span>
+                        </label>
+                      </div>
+                      <div class="flex items-center space-x-2">
+                        <label class="text-sm text-gray-600">Interval:</label>
+                        <select 
+                          v-model="adminData.syncStatus.zabbix.syncInterval"
+                          class="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option :value="30">30 seconds</option>
+                          <option :value="60">1 minute</option>
+                          <option :value="300">5 minutes</option>
+                          <option :value="900">15 minutes</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Sync Errors -->
+                  <div v-if="adminData.syncStatus.zabbix.errors.length" class="mt-4">
+                    <h4 class="text-sm font-medium text-red-900 mb-2">Sync Errors</h4>
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div v-for="(error, index) in adminData.syncStatus.zabbix.errors" :key="index" class="text-sm text-red-700">
+                        • {{ error }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 <!-- Prometheus Integration -->
                 <div v-if="adminData.selectedIntegration === 'prometheus'" class="bg-white rounded-xl shadow-sm p-6">
                   <h3 class="text-lg font-semibold mb-4">🔥 Prometheus Integration</h3>
+                  
+                  <!-- Connection Status -->
+                  <div class="mb-6 p-4 rounded-lg" :class="[
+                    adminData.syncStatus.prometheus.connected ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+                  ]">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-2">
+                        <div :class="[
+                          'w-3 h-3 rounded-full',
+                          adminData.syncStatus.prometheus.connected ? 'bg-green-500' : 'bg-gray-400'
+                        ]"></div>
+                        <span class="font-medium">
+                          {{ adminData.syncStatus.prometheus.connected ? 'Connected' : 'Not Connected' }}
+                        </span>
+                      </div>
+                      <div v-if="adminData.syncStatus.prometheus.lastSync" class="text-sm text-gray-600">
+                        Last sync: {{ new Date(adminData.syncStatus.prometheus.lastSync).toLocaleString() }}
+                      </div>
+                    </div>
+                    
+                    <!-- Sync Progress -->
+                    <div v-if="adminData.syncStatus.prometheus.syncing" class="mt-3">
+                      <div class="flex justify-between text-sm mb-1">
+                        <span>Synchronizing metrics...</span>
+                        <span>{{ adminData.syncStatus.prometheus.syncProgress }}%</span>
+                      </div>
+                      <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          :style="{ width: adminData.syncStatus.prometheus.syncProgress + '%' }"
+                        ></div>
+                      </div>
+                      <div class="text-xs text-gray-600 mt-1">
+                        {{ adminData.syncStatus.prometheus.syncedMetrics }} / {{ adminData.syncStatus.prometheus.totalMetrics }} metrics processed
+                      </div>
+                    </div>
+                  </div>
+                  
                   <form @submit.prevent="testConnection('prometheus')" class="space-y-4">
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">Prometheus URL</label>
@@ -1357,10 +1657,70 @@ const app = createApp({
                       <label class="block text-sm font-medium text-gray-700 mb-2">Password (Optional)</label>
                       <input id="prometheus-password" v-model="adminData.connectionForms.prometheus.password" type="password" placeholder="Leave empty if no authentication" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="current-password">
                     </div>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                      Test Connection & Ingest
-                    </button>
+                    
+                    <!-- Connection Actions -->
+                    <div class="flex space-x-3">
+                      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Test Connection
+                      </button>
+                      <button 
+                        type="button"
+                        @click="startSync('prometheus')"
+                        :disabled="!adminData.syncStatus.prometheus.connected || adminData.syncStatus.prometheus.syncing"
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {{ adminData.syncStatus.prometheus.syncing ? 'Syncing...' : 'Start Sync' }}
+                      </button>
+                      <button 
+                        v-if="adminData.syncStatus.prometheus.syncing"
+                        type="button"
+                        @click="stopSync('prometheus')"
+                        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                      >
+                        Stop Sync
+                      </button>
+                    </div>
                   </form>
+                  
+                  <!-- Auto-Sync Settings -->
+                  <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3">Auto-Sync Settings</h4>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-3">
+                        <label class="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            :checked="adminData.syncStatus.prometheus.autoSync"
+                            @change="toggleAutoSync('prometheus')"
+                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          >
+                          <span class="ml-2 text-sm text-gray-700">Enable automatic synchronization</span>
+                        </label>
+                      </div>
+                      <div class="flex items-center space-x-2">
+                        <label class="text-sm text-gray-600">Interval:</label>
+                        <select 
+                          v-model="adminData.syncStatus.prometheus.syncInterval"
+                          class="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option :value="15">15 seconds</option>
+                          <option :value="30">30 seconds</option>
+                          <option :value="60">1 minute</option>
+                          <option :value="300">5 minutes</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Sync Errors -->
+                  <div v-if="adminData.syncStatus.prometheus.errors.length" class="mt-4">
+                    <h4 class="text-sm font-medium text-red-900 mb-2">Sync Errors</h4>
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div v-for="(error, index) in adminData.syncStatus.prometheus.errors" :key="index" class="text-sm text-red-700">
+                        • {{ error }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1568,6 +1928,41 @@ const app = createApp({
           vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
           zabbix: { url: 'http://zabbix.local/api_jsonrpc.php', username: 'Admin', password: '' },
           prometheus: { url: 'http://localhost:9090', username: '', password: '' }
+        },
+        syncStatus: {
+          vcenter: {
+            connected: false,
+            lastSync: null,
+            syncing: false,
+            syncProgress: 0,
+            syncedVMs: 0,
+            totalVMs: 0,
+            errors: [],
+            autoSync: false,
+            syncInterval: 300 // 5 minutes in seconds
+          },
+          zabbix: {
+            connected: false,
+            lastSync: null,
+            syncing: false,
+            syncProgress: 0,
+            syncedMetrics: 0,
+            totalMetrics: 0,
+            errors: [],
+            autoSync: false,
+            syncInterval: 60 // 1 minute in seconds
+          },
+          prometheus: {
+            connected: false,
+            lastSync: null,
+            syncing: false,
+            syncProgress: 0,
+            syncedMetrics: 0,
+            totalMetrics: 0,
+            errors: [],
+            autoSync: false,
+            syncInterval: 30 // 30 seconds
+          }
         }
       }
     };
@@ -2882,7 +3277,12 @@ const app = createApp({
         if (response.ok) {
           const result = await response.json();
           console.log(`${type} connection successful:`, result);
-          alert(`✅ ${type} integration successful!`);
+          
+          // Update connection status
+          this.adminData.syncStatus[type].connected = true;
+          this.adminData.syncStatus[type].errors = [];
+          
+          alert(`✅ ${type} integration successful! Click "Start Sync" to begin data synchronization.`);
         } else {
           const error = await response.text();
           console.error(`${type} connection failed:`, error);
@@ -2892,6 +3292,217 @@ const app = createApp({
         console.error(`Error testing ${type} connection:`, error);
         alert(`❌ Error testing ${type} connection: ${error.message}`);
       }
+    },
+    
+    async startSync(type) {
+      if (!this.hasAccess('admin', 'system_admin')) {
+        alert('Access denied: You do not have permission to start data synchronization.');
+        return;
+      }
+      
+      if (!this.adminData.syncStatus[type].connected) {
+        alert(`Please test the ${type} connection first before starting sync.`);
+        return;
+      }
+      
+      try {
+        this.adminData.syncStatus[type].syncing = true;
+        this.adminData.syncStatus[type].syncProgress = 0;
+        this.adminData.syncStatus[type].errors = [];
+        
+        if (!this.apiAvailable) {
+          // Simulate sync for demo purposes
+          this.simulateSync(type);
+          return;
+        }
+        
+        const response = await fetch(`${this.apiBaseUrl}/admin/${type}/sync`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.sessionToken}`
+          },
+          body: JSON.stringify({
+            ...this.adminData.connectionForms[type],
+            fullSync: true
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          // Start progress tracking
+          this.trackSyncProgress(type);
+          
+          console.log(`${type} sync started:`, result);
+        } else {
+          const error = await response.text();
+          console.error(`${type} sync failed:`, error);
+          this.adminData.syncStatus[type].errors.push(error);
+          this.adminData.syncStatus[type].syncing = false;
+          alert(`❌ Failed to start ${type} sync: ${error}`);
+        }
+      } catch (error) {
+        console.error(`Error starting ${type} sync:`, error);
+        this.adminData.syncStatus[type].errors.push(error.message);
+        this.adminData.syncStatus[type].syncing = false;
+        alert(`❌ Error starting ${type} sync: ${error.message}`);
+      }
+    },
+    
+    async trackSyncProgress(type) {
+      const syncStatus = this.adminData.syncStatus[type];
+      const progressInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${this.apiBaseUrl}/admin/${type}/sync/status`, {
+            headers: {
+              'Authorization': `Bearer ${this.sessionToken}`
+            }
+          });
+          
+          if (response.ok) {
+            const status = await response.json();
+            
+            syncStatus.syncProgress = status.progress || 0;
+            syncStatus.syncedVMs = status.processed || 0;
+            syncStatus.totalVMs = status.total || 0;
+            
+            if (status.completed) {
+              syncStatus.syncing = false;
+              syncStatus.lastSync = new Date().toISOString();
+              syncStatus.syncProgress = 100;
+              
+              // Refresh dashboard data
+              await this.loadData();
+              
+              clearInterval(progressInterval);
+              console.log(`${type} sync completed successfully`);
+              
+              // Show completion notification
+              this.showSyncNotification(type, 'success', `${type} sync completed! Synchronized ${status.processed} items.`);
+            } else if (status.error) {
+              syncStatus.syncing = false;
+              syncStatus.errors.push(status.error);
+              clearInterval(progressInterval);
+              
+              this.showSyncNotification(type, 'error', `${type} sync failed: ${status.error}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error tracking sync progress:', error);
+          syncStatus.syncing = false;
+          clearInterval(progressInterval);
+        }
+      }, 2000); // Check every 2 seconds
+    },
+    
+    showSyncNotification(type, status, message) {
+      // For now, use alert - in a real app you'd use a proper notification system
+      if (status === 'success') {
+        console.log(`✅ ${message}`);
+      } else {
+        console.error(`❌ ${message}`);
+      }
+    },
+    
+    async stopSync(type) {
+      if (!this.hasAccess('admin', 'system_admin')) {
+        alert('Access denied: You do not have permission to stop data synchronization.');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/admin/${type}/sync/stop`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`
+          }
+        });
+        
+        if (response.ok) {
+          this.adminData.syncStatus[type].syncing = false;
+          console.log(`${type} sync stopped`);
+        }
+      } catch (error) {
+        console.error(`Error stopping ${type} sync:`, error);
+      }
+    },
+    
+    toggleAutoSync(type) {
+      if (!this.hasAccess('admin', 'system_admin')) {
+        alert('Access denied: You do not have permission to configure auto-sync.');
+        return;
+      }
+      
+      const syncStatus = this.adminData.syncStatus[type];
+      syncStatus.autoSync = !syncStatus.autoSync;
+      
+      if (syncStatus.autoSync) {
+        this.startAutoSync(type);
+      } else {
+        this.stopAutoSync(type);
+      }
+    },
+    
+    startAutoSync(type) {
+      const syncStatus = this.adminData.syncStatus[type];
+      
+      if (syncStatus.autoSyncInterval) {
+        clearInterval(syncStatus.autoSyncInterval);
+      }
+      
+      syncStatus.autoSyncInterval = setInterval(() => {
+        if (!syncStatus.syncing && syncStatus.connected) {
+          this.startSync(type);
+        }
+      }, syncStatus.syncInterval * 1000);
+      
+      console.log(`Auto-sync enabled for ${type} (every ${syncStatus.syncInterval} seconds)`);
+    },
+    
+    stopAutoSync(type) {
+      const syncStatus = this.adminData.syncStatus[type];
+      
+      if (syncStatus.autoSyncInterval) {
+        clearInterval(syncStatus.autoSyncInterval);
+        syncStatus.autoSyncInterval = null;
+      }
+      
+      console.log(`Auto-sync disabled for ${type}`);
+    },
+    
+    simulateSync(type) {
+      // Simulate sync progress for demo purposes
+      const syncStatus = this.adminData.syncStatus[type];
+      const totalItems = type === 'vcenter' ? 25 : 50; // Mock totals
+      
+      syncStatus.totalVMs = totalItems;
+      syncStatus.totalMetrics = totalItems;
+      syncStatus.syncedVMs = 0;
+      syncStatus.syncedMetrics = 0;
+      
+      const progressInterval = setInterval(() => {
+        syncStatus.syncProgress += Math.random() * 15;
+        
+        if (type === 'vcenter') {
+          syncStatus.syncedVMs = Math.min(totalItems, Math.round((syncStatus.syncProgress / 100) * totalItems));
+        } else {
+          syncStatus.syncedMetrics = Math.min(totalItems, Math.round((syncStatus.syncProgress / 100) * totalItems));
+        }
+        
+        if (syncStatus.syncProgress >= 100) {
+          syncStatus.syncProgress = 100;
+          syncStatus.syncing = false;
+          syncStatus.lastSync = new Date().toISOString();
+          
+          clearInterval(progressInterval);
+          
+          // Update dashboard data to show new synced data
+          this.loadData();
+          
+          console.log(`✅ ${type} sync simulation completed! Synchronized ${totalItems} items.`);
+        }
+      }, 500); // Update every 500ms for demo
     }
   }
 });
