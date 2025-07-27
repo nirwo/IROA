@@ -829,20 +829,36 @@ async def save_integration(integration_type: str, request: ConnectionTestRequest
     if integration_type not in ['vcenter', 'zabbix', 'prometheus']:
         raise HTTPException(status_code=400, detail="Invalid integration type")
     
-    if not request.host or not request.username:
-        raise HTTPException(status_code=400, detail="Missing required connection information")
+    # Handle different field names for different integration types
+    if integration_type == 'zabbix':
+        # Zabbix uses url, username, password fields
+        if not request.url or not request.username:
+            missing_fields = []
+            if not request.url: missing_fields.append('url')
+            if not request.username: missing_fields.append('username')
+            error_msg = f"Missing required Zabbix credentials: {', '.join(missing_fields)}"
+            print(f"❌ Zabbix save validation failed: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        host_or_url = request.url
+    else:
+        # vCenter and Prometheus use host, username fields
+        if not request.host or not request.username:
+            raise HTTPException(status_code=400, detail="Missing required connection information")
+        host_or_url = request.host
     
     # Load existing config
     config = load_integration_config()
     
     # Save configuration (without password for security)
     config[integration_type] = {
-        "host": request.host,
+        "host": host_or_url,  # Use the correct field (host for vCenter/Prometheus, url for Zabbix)
         "username": request.username,
         "port": getattr(request, 'port', None),
         "saved_at": datetime.now().isoformat(),
         "status": "configured"
     }
+    
+    print(f"✅ Saving {integration_type} configuration: host={host_or_url}, username={request.username}")
     
     # Save to file
     if save_integration_config(config):
