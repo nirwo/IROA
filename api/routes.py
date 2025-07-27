@@ -2311,11 +2311,15 @@ async def get_profile_preview(cluster: str = None):
                 print(f"🏗️ Found {len(cluster_hosts)} ESX hosts across all clusters")
             
             # Aggregate CPU cores and memory from all ESX hosts in the cluster
+            # Note: cpu_cores represents physical cores, but VMs use virtual cores (vCPUs)
+            # ESX hosts typically support 2 virtual cores per physical core (hyperthreading)
             for host in cluster_hosts:
-                cluster_total_cpu += host.get('cpu_cores', 0)
+                physical_cores = host.get('cpu_cores', 0)
+                virtual_cores = physical_cores * 2  # Hyperthreading: 2 vCPUs per physical core
+                cluster_total_cpu += virtual_cores
                 cluster_total_memory += host.get('memory_gb', 0)
                 cluster_host_count += 1
-                print(f"   📡 {host.get('name', 'Unknown')}: {host.get('cpu_cores', 0)} cores, {host.get('memory_gb', 0)}GB")
+                print(f"   📡 {host.get('name', 'Unknown')}: {physical_cores} physical cores → {virtual_cores} vCPUs, {host.get('memory_gb', 0)}GB")
         
         # Fallback to local system resources if no vCenter data
         if cluster_total_cpu == 0 or cluster_total_memory == 0:
@@ -2339,7 +2343,7 @@ async def get_profile_preview(cluster: str = None):
         remaining_disk = max_cluster_disk - cluster_allocated_disk
         
         print(f"🔧 Cluster Capacity: CPU {cluster_allocated_cpu}/{max_cluster_cpu}, Memory {cluster_allocated_memory}/{max_cluster_memory}GB, Disk {cluster_allocated_disk}/{max_cluster_disk}GB")
-        print(f"💾 Cluster Resources: {cluster_total_cpu} cores total, {cluster_total_memory:.1f}GB total memory from {cluster_host_count} ESX hosts")
+        print(f"💾 Cluster Resources: {cluster_total_cpu} vCPUs total, {cluster_total_memory:.1f}GB total memory from {cluster_host_count} ESX hosts")
         
         # Calculate available memory (total cluster memory - allocated memory)
         cluster_available_memory = cluster_total_memory - cluster_allocated_memory
@@ -2399,20 +2403,20 @@ async def get_profile_preview(cluster: str = None):
         return {
             "cluster_name": cluster or "All Clusters",
             "cluster_capacity": {
-                "total_cpu_cores": cluster_total_cpu,
+                "total_cpu_vcpus": cluster_total_cpu,
                 "total_memory_gb": round(cluster_total_memory, 1),
                 "total_disk_gb": max_cluster_disk,
-                "max_cpu_capacity_80_percent": max_cluster_cpu,
+                "max_vcpu_capacity_80_percent": max_cluster_cpu,
                 "max_memory_capacity_80_percent": max_cluster_memory,
-                "current_cpu_allocated": cluster_allocated_cpu,
+                "current_vcpu_allocated": cluster_allocated_cpu,
                 "current_memory_allocated": round(cluster_allocated_memory, 1),
                 "current_disk_allocated": cluster_allocated_disk,
                 "available_memory_gb": round(cluster_available_memory, 1),
-                "remaining_cpu": remaining_cpu,
+                "remaining_vcpu": remaining_cpu,
                 "remaining_memory": remaining_memory,
                 "remaining_disk": remaining_disk,
                 "cluster_host_count": cluster_host_count,
-                "cpu_allocation_percent": round((cluster_allocated_cpu / max_cluster_cpu) * 100, 1) if max_cluster_cpu > 0 else 0,
+                "vcpu_allocation_percent": round((cluster_allocated_cpu / max_cluster_cpu) * 100, 1) if max_cluster_cpu > 0 else 0,
                 "memory_allocation_percent": round((cluster_allocated_memory / max_cluster_memory) * 100, 1) if max_cluster_memory > 0 else 0,
                 "disk_allocation_percent": round((cluster_allocated_disk / max_cluster_disk) * 100, 1) if max_cluster_disk > 0 else 0
             },
