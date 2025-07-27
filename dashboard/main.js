@@ -2872,11 +2872,21 @@ const app = createApp({
     },
     
     updateRealtimeMetrics() {
-      // Simulate real-time data updates
-      this.realTimeData.metrics.avgCpu = Math.max(0, Math.min(100, 
-        this.realTimeData.metrics.avgCpu + (Math.random() - 0.5) * 10));
-      this.realTimeData.metrics.avgMemory = Math.max(0, Math.min(100, 
-        this.realTimeData.metrics.avgMemory + (Math.random() - 0.5) * 8));
+      // Update real-time data from actual infrastructure if available
+      const hasVCenterData = this.vcenterInventory.hasSyncedData && this.vcenterInventory.vms.length > 0;
+      const hasHyperVData = this.hypervInventory.hasSyncedData && this.hypervInventory.vms.length > 0;
+      
+      if (hasVCenterData || hasHyperVData) {
+        // Use real data - already updated by updateStatsFromVCenterData() and updateStatsFromHyperVData()
+        this.realTimeData.isConnected = true;
+      } else {
+        // Simulate real-time data updates only when no real data is available
+        this.realTimeData.metrics.avgCpu = Math.max(0, Math.min(100, 
+          this.realTimeData.metrics.avgCpu + (Math.random() - 0.5) * 10));
+        this.realTimeData.metrics.avgMemory = Math.max(0, Math.min(100, 
+          this.realTimeData.metrics.avgMemory + (Math.random() - 0.5) * 8));
+        this.realTimeData.isConnected = false;  // Mark as simulation
+      }
       
       // Occasionally add new events
       if (Math.random() < 0.3) {
@@ -3073,7 +3083,8 @@ const app = createApp({
         
         // Update clusters array
         if (this.capacityData && this.capacityData.clusters) {
-          this.clusters = [...new Set(this.capacityData.clusters.map(c => c.cluster))];
+          // Extract cluster names from capacity data
+          this.clusters = [...new Set(this.capacityData.clusters.map(c => c.cluster || c.name || c))];
         }
       } catch (error) {
         console.error('Error loading capacity data:', error);
@@ -3665,9 +3676,10 @@ const app = createApp({
           const result = await response.json();
           console.log(`${type} connection successful:`, result);
           
-          // Update connection status
+          // Update connection status and persist it
           this.adminData.syncStatus[type].connected = true;
           this.adminData.syncStatus[type].errors = [];
+          this.adminData.syncStatus[type].lastConnected = new Date().toISOString();
           
           alert(`✅ ${type} integration successful! Click "Start Sync" to begin data synchronization.`);
         } else {
@@ -4082,7 +4094,8 @@ const app = createApp({
         // Store clusters data
         if (inventory.clusters && Array.isArray(inventory.clusters)) {
           this.vcenterInventory.clusters = inventory.clusters;
-          this.clusters = inventory.clusters; // Also update the clusters array for capacity planning
+          // Extract cluster names for dropdowns (not full objects)
+          this.clusters = [...new Set(inventory.clusters.map(cluster => cluster.name || cluster.cluster || cluster))];
           console.log(`✅ Stored ${inventory.clusters.length} clusters`);
         }
         
@@ -4152,6 +4165,8 @@ const app = createApp({
         // Store clusters data
         if (inventory.clusters && Array.isArray(inventory.clusters)) {
           this.hypervInventory.clusters = inventory.clusters;
+          // Extract cluster names for dropdowns (not full objects)
+          this.clusters = [...new Set(inventory.clusters.map(cluster => cluster.name || cluster.cluster || cluster))];
           console.log(`✅ Stored ${inventory.clusters.length} HyperV clusters`);
         }
         
@@ -4211,6 +4226,7 @@ const app = createApp({
           this.realTimeData.metrics.avgCpu = Math.round(avgCpu);
           this.realTimeData.metrics.avgMemory = Math.round(avgMemory);
           this.realTimeData.metrics.activeVMs = runningVMs.length;
+          this.realTimeData.isConnected = true;  // Mark as connected with real data
         }
         
         console.log('📊 Dashboard stats updated with HyperV data');
@@ -4398,6 +4414,12 @@ const app = createApp({
             bgColor: 'bg-orange-50'
           }
         ];
+        
+        // Update real-time data with vCenter metrics
+        this.realTimeData.metrics.avgCpu = Math.round(avgCpu);
+        this.realTimeData.metrics.avgMemory = Math.round(avgMemory);
+        this.realTimeData.metrics.activeVMs = runningVMs;
+        this.realTimeData.isConnected = true;  // Mark as connected with real data
         
         console.log('📈 Dashboard stats updated with real vCenter data');
         
