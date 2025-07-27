@@ -2287,6 +2287,23 @@
               console.log(`   Host: '${form.host}' (length: ${form.host ? form.host.length : 0})`);
               console.log(`   Username: '${form.username}' (length: ${form.username ? form.username.length : 0})`);
               console.log(`   Password: ${'*'.repeat(form.password ? form.password.length : 0)} (length: ${form.password ? form.password.length : 0})`);
+            } else if (integrationType === 'zabbix') {
+              console.log('📤 Sending Zabbix credentials:');
+              console.log(`   URL: '${form.url}' (length: ${form.url ? form.url.length : 0})`);
+              console.log(`   Username: '${form.username}' (length: ${form.username ? form.username.length : 0})`);
+              console.log(`   Password: ${'*'.repeat(form.password ? form.password.length : 0)} (length: ${form.password ? form.password.length : 0})`);
+              
+              // Validate required fields before sending
+              const missingFields = [];
+              if (!form.url || form.url.trim() === '') missingFields.push('URL');
+              if (!form.username || form.username.trim() === '') missingFields.push('Username');
+              if (!form.password || form.password.trim() === '') missingFields.push('Password');
+              
+              if (missingFields.length > 0) {
+                console.error(`❌ Missing required Zabbix fields: ${missingFields.join(', ')}`);
+                this.showNotification(`Missing required connection information: ${missingFields.join(', ')}`, 'error');
+                return;
+              }
             }
             
             const endpoint = `${this.apiBaseUrl}/admin/${integrationType}/test`;
