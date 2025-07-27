@@ -454,13 +454,21 @@ async def sync_vcenter_inventory_with_credentials(request: ConnectionTestRequest
             # Get hosts in this cluster
             for host in cluster.host:
                 host_summary = host.summary
+                
+                # Calculate logical cores (vCPUs) - physical cores * threads per core
+                physical_cores = host_summary.hardware.numCpuCores
+                cpu_threads = host_summary.hardware.numCpuThreads
+                logical_cores = cpu_threads if cpu_threads else physical_cores * 2  # Default to 2x if threads not available
+                
                 host_data = {
                     "name": host.name,
                     "moid": host._moId,
                     "cluster": cluster.name,
                     "datacenter": cluster.parent.parent.name if cluster.parent and cluster.parent.parent else "Unknown",
-                    "cpu_cores": host_summary.hardware.numCpuCores,
-                    "cpu_mhz": host_summary.hardware.cpuMhz * host_summary.hardware.numCpuCores,
+                    "cpu_cores": physical_cores,  # Physical cores
+                    "logical_cores": logical_cores,  # Logical cores (vCPUs) for VM allocation
+                    "cpu_threads": cpu_threads,  # Total CPU threads
+                    "cpu_mhz": host_summary.hardware.cpuMhz * physical_cores,
                     "memory_gb": round(host_summary.hardware.memorySize / (1024**3), 2),
                     "cpu_usage_mhz": host_summary.quickStats.overallCpuUsage if host_summary.quickStats else 0,
                     "memory_usage_gb": round(host_summary.quickStats.overallMemoryUsage / 1024, 2) if host_summary.quickStats else 0,
@@ -786,9 +794,12 @@ vcenter_inventory_cache = {
         {"name": "Infrastructure-Cluster", "datacenter": "DC-East", "vm_count": 1, "host_count": 2}
     ],
     "hosts": [
-        {"name": "esxi-host-01", "cluster": "Production-Cluster", "cpu_cores": 24, "memory_gb": 128},
-        {"name": "esxi-host-02", "cluster": "Database-Cluster", "cpu_cores": 32, "memory_gb": 256},
-        {"name": "esxi-host-03", "cluster": "Development-Cluster", "cpu_cores": 16, "memory_gb": 64}
+        {"name": "esxi-host-01", "cluster": "Production-Cluster", "cpu_cores": 24, "logical_cores": 48, "cpu_threads": 48, "memory_gb": 128},
+        {"name": "esxi-host-02", "cluster": "Database-Cluster", "cpu_cores": 32, "logical_cores": 64, "cpu_threads": 64, "memory_gb": 256},
+        {"name": "esxi-host-03", "cluster": "Development-Cluster", "cpu_cores": 16, "logical_cores": 32, "cpu_threads": 32, "memory_gb": 64},
+        {"name": "esxi-host-04", "cluster": "Production-Cluster", "cpu_cores": 28, "logical_cores": 56, "cpu_threads": 56, "memory_gb": 192},
+        {"name": "esxi-host-05", "cluster": "Database-Cluster", "cpu_cores": 40, "logical_cores": 80, "cpu_threads": 80, "memory_gb": 512},
+        {"name": "esxi-host-06", "cluster": "Test-Cluster", "cpu_cores": 12, "logical_cores": 24, "cpu_threads": 24, "memory_gb": 96}
     ],
     "total_vms": 5,
     "running_vms": 4,
@@ -2310,16 +2321,15 @@ async def get_profile_preview(cluster: str = None):
                 cluster_hosts = vcenter_inventory_cache["hosts"]
                 print(f"🏗️ Found {len(cluster_hosts)} ESX hosts across all clusters")
             
-            # Aggregate CPU cores and memory from all ESX hosts in the cluster
-            # Note: cpu_cores represents physical cores, but VMs use virtual cores (vCPUs)
-            # ESX hosts typically support 2 virtual cores per physical core (hyperthreading)
+            # Aggregate logical cores (vCPUs) and memory from all ESX hosts in the cluster
+            # Use logical_cores from real vCenter data which includes hyperthreading calculation
             for host in cluster_hosts:
                 physical_cores = host.get('cpu_cores', 0)
-                virtual_cores = physical_cores * 2  # Hyperthreading: 2 vCPUs per physical core
-                cluster_total_cpu += virtual_cores
+                logical_cores = host.get('logical_cores', physical_cores * 2)  # Fallback to 2x if not available
+                cluster_total_cpu += logical_cores
                 cluster_total_memory += host.get('memory_gb', 0)
                 cluster_host_count += 1
-                print(f"   📡 {host.get('name', 'Unknown')}: {physical_cores} physical cores → {virtual_cores} vCPUs, {host.get('memory_gb', 0)}GB")
+                print(f"   📡 {host.get('name', 'Unknown')}: {physical_cores} physical cores → {logical_cores} logical cores (vCPUs), {host.get('memory_gb', 0)}GB")
         
         # Fallback to local system resources if no vCenter data
         if cluster_total_cpu == 0 or cluster_total_memory == 0:
