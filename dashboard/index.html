@@ -2166,7 +2166,7 @@
       async mounted() {
         try {
           // Initialize Lucide icons
-          lucide.createIcons();
+          this.initializeLucideIcons();
           
           // Run network diagnostics for debugging
           await this.runNetworkDiagnostics();
@@ -2254,9 +2254,10 @@
               this.loginForm.password = '';
               this.loginError = null;
               
-              // Force Vue to update the DOM
+              // Force Vue to update the DOM and refresh icons
               this.$nextTick(() => {
                 console.log('✅ Login modal should now be hidden:', this.showLoginModal);
+                this.initializeLucideIcons();
               });
               
               // Set default tab based on permissions
@@ -2272,6 +2273,9 @@
               await this.loadSystemInfo();
               await this.checkEndpointStatus();
               await this.loadIntegrationConfig();
+              
+              // Refresh icons after loading all data
+              this.refreshIcons();
             } else {
               this.loginError = data.detail || 'Login failed. Please check your credentials.';
             }
@@ -2404,10 +2408,35 @@
           return headers;
         },
         
+        // Lucide icon management
+        initializeLucideIcons() {
+          try {
+            if (typeof lucide !== 'undefined') {
+              console.log('🎨 Initializing Lucide icons...');
+              lucide.createIcons();
+              console.log('✅ Lucide icons initialized successfully');
+            } else {
+              console.error('❌ Lucide library not loaded');
+            }
+          } catch (error) {
+            console.error('❌ Error initializing Lucide icons:', error);
+          }
+        },
+        
+        // Re-initialize icons after DOM updates
+        refreshIcons() {
+          this.$nextTick(() => {
+            this.initializeLucideIcons();
+          });
+        },
+        
         // Tab management
         setActiveTab(tab) {
           this.activeTab = tab;
           localStorage.setItem('iroa-active-tab', tab);
+          
+          // Re-initialize icons after tab change
+          this.refreshIcons();
           
           // Load data when switching to specific tabs
           if (tab === 'vms') {
@@ -2435,6 +2464,8 @@
           // Use Vue's nextTick to ensure DOM is ready
           this.$nextTick(() => {
             this.notification = { message, type };
+            // Refresh icons after showing notification
+            this.initializeLucideIcons();
             this.notificationTimeout = setTimeout(() => {
               this.notification = null;
               this.notificationTimeout = null;
