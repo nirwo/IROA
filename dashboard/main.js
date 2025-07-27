@@ -2540,6 +2540,10 @@ const app = createApp({
             this.underutilizedVMs = this.getMockUnderutilizedVMs();
             this.stats[1].value = this.underutilizedVMs.length.toString();
           }
+          
+          // Load persisted infrastructure inventory from database
+          await this.loadPersistedInventory();
+          
         } else {
           // Use mock data when API is unavailable
           this.recommendations = this.getMockRecommendations();
@@ -4168,6 +4172,72 @@ const app = createApp({
         
       } catch (error) {
         console.error('❌ Error updating stats from HyperV data:', error);
+      }
+    },
+
+    async loadPersistedInventory() {
+      // Load persisted infrastructure inventory from database on startup
+      console.log('🔄 Loading persisted infrastructure inventory...');
+      
+      try {
+        // Load vCenter inventory from database
+        await this.loadPersistedVCenterInventory();
+        
+        // Load HyperV inventory from database  
+        await this.loadPersistedHyperVInventory();
+        
+      } catch (error) {
+        console.error('❌ Error loading persisted inventory:', error);
+      }
+    },
+
+    async loadPersistedVCenterInventory() {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/vcenter/inventory`, {
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const inventory = await response.json();
+          if (inventory && inventory.vms && inventory.vms.length > 0) {
+            console.log(`📊 Loaded ${inventory.vms.length} vCenter VMs from database`);
+            this.storeVCenterInventory(inventory);
+          } else {
+            console.log('📊 No persisted vCenter inventory found');
+          }
+        } else {
+          console.warn('Failed to load persisted vCenter inventory:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Error loading persisted vCenter inventory:', error);
+      }
+    },
+
+    async loadPersistedHyperVInventory() {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/hyperv/inventory`, {
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const inventory = await response.json();
+          if (inventory && inventory.vms && inventory.vms.length > 0) {
+            console.log(`📊 Loaded ${inventory.vms.length} HyperV VMs from database`);
+            this.storeHyperVInventory(inventory);
+          } else {
+            console.log('📊 No persisted HyperV inventory found');
+          }
+        } else {
+          console.warn('Failed to load persisted HyperV inventory:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Error loading persisted HyperV inventory:', error);
       }
     },
 

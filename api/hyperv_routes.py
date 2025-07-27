@@ -5,12 +5,16 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 import json
+from .database_manager import InfrastructureDBManager
 
 router = APIRouter()
 
 # Global cache for HyperV VMs and comprehensive inventory
 hyperv_vms_cache = []
 hyperv_inventory_cache = {}
+
+# Initialize database manager
+db_manager = InfrastructureDBManager()
 
 # Import required functions from routes.py
 from .routes import ConnectionTestRequest, load_integration_config, save_integration_config
@@ -378,6 +382,16 @@ async def sync_hyperv_inventory_with_credentials(request: ConnectionTestRequest)
         }
         save_integration_config(config)
         
+        # Save inventory data to database for persistence
+        try:
+            db_success = db_manager.save_infrastructure_inventory('hyperv', hyperv_inventory_cache)
+            if db_success:
+                print("💾 HyperV inventory data saved to database")
+            else:
+                print("⚠️ Failed to save HyperV inventory to database")
+        except Exception as db_error:
+            print(f"⚠️ Database save error: {db_error}")
+        
         print(f"✅ Successfully synced complete HyperV inventory:")
         print(f"   🏢 1 datacenter")
         print(f"   🏢 {len(clusters)} clusters")
@@ -414,11 +428,19 @@ async def sync_hyperv_inventory_with_credentials(request: ConnectionTestRequest)
 @router.get("/admin/hyperv/inventory")
 async def get_hyperv_inventory():
     """Get complete HyperV infrastructure inventory"""
-    global hyperv_inventory_cache
+    # First try to get from database
+    db_inventory = db_manager.get_infrastructure_inventory('hyperv')
+    if db_inventory:
+        return {
+            "status": "success",
+            "inventory": db_inventory
+        }
     
+    # Fallback to cache
+    global hyperv_inventory_cache
     if not hyperv_inventory_cache:
         return {
-            "status": "no_data",
+            "status": "no_data", 
             "message": "No HyperV inventory data available. Please sync first."
         }
     
@@ -431,6 +453,13 @@ async def get_hyperv_inventory():
 async def get_hyperv_vms():
     """Get all cached HyperV VMs"""
     try:
+        # First try to get from database
+        db_inventory = db_manager.get_infrastructure_inventory('hyperv')
+        if db_inventory and db_inventory.get('vms'):
+            print(f"📊 HyperV VMs endpoint: Returning {len(db_inventory['vms'])} database VMs")
+            return db_inventory['vms']
+        
+        # Fallback to cache
         print(f"📊 HyperV VMs endpoint: Returning {len(hyperv_vms_cache)} cached VMs")
         return hyperv_vms_cache
     except Exception as e:
@@ -441,6 +470,13 @@ async def get_hyperv_vms():
 async def get_hyperv_inventory():
     """Get cached HyperV inventory (datacenters, clusters, hosts)"""
     try:
+        # First try to get from database
+        db_inventory = db_manager.get_infrastructure_inventory('hyperv')
+        if db_inventory:
+            print(f"📊 HyperV Inventory endpoint: Returning database inventory with {db_inventory.get('summary', {}).get('total_vms', 0)} total VMs")
+            return db_inventory
+        
+        # Fallback to cache
         print(f"📊 HyperV Inventory endpoint: Returning cached inventory with {hyperv_inventory_cache.get('summary', {}).get('total_vms', 0)} total VMs")
         return hyperv_inventory_cache
     except Exception as e:

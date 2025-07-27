@@ -24,8 +24,12 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import json
 import os
+from .database_manager import InfrastructureDBManager
 
 router = APIRouter()
+
+# Initialize database manager
+db_manager = InfrastructureDBManager()
 
 # ================================
 # AUTHENTICATION ENDPOINTS
@@ -763,6 +767,16 @@ async def sync_vcenter_inventory_with_credentials(request: ConnectionTestRequest
         }
         save_integration_config(config)
         
+        # Save inventory data to database for persistence
+        try:
+            db_success = db_manager.save_infrastructure_inventory('vcenter', vcenter_inventory_cache)
+            if db_success:
+                print("💾 vCenter inventory data saved to database")
+            else:
+                print("⚠️ Failed to save vCenter inventory to database")
+        except Exception as db_error:
+            print(f"⚠️ Database save error: {db_error}")
+        
         print(f"✅ Successfully synced complete vCenter inventory:")
         print(f"   📍 {len(datacenters)} datacenters")
         print(f"   🏢 {len(clusters)} clusters")
@@ -799,6 +813,13 @@ async def sync_vcenter_inventory_with_credentials(request: ConnectionTestRequest
 async def get_vcenter_vms():
     """Get all cached vCenter VMs"""
     try:
+        # First try to get from database
+        db_inventory = db_manager.get_infrastructure_inventory('vcenter')
+        if db_inventory and db_inventory.get('vms'):
+            print(f"📊 vCenter VMs endpoint: Returning {len(db_inventory['vms'])} database VMs")
+            return db_inventory['vms']
+        
+        # Fallback to cache
         print(f"📊 vCenter VMs endpoint: Returning {len(vcenter_vms_cache)} cached VMs")
         return vcenter_vms_cache
     except Exception as e:
@@ -810,7 +831,14 @@ async def get_vcenter_vms():
 async def get_vcenter_inventory():
     """Get cached vCenter inventory (datacenters, clusters, hosts)"""
     try:
-        print(f"📊 vCenter Inventory endpoint: Returning cached inventory with {vcenter_inventory_cache.get('total_vms', 0)} total VMs")
+        # First try to get from database
+        db_inventory = db_manager.get_infrastructure_inventory('vcenter')
+        if db_inventory:
+            print(f"📊 vCenter Inventory endpoint: Returning database inventory with {db_inventory.get('summary', {}).get('total_vms', 0)} total VMs")
+            return db_inventory
+        
+        # Fallback to cache
+        print(f"📊 vCenter Inventory endpoint: Returning cached inventory with {vcenter_inventory_cache.get('summary', {}).get('total_vms', 0)} total VMs")
         return vcenter_inventory_cache
     except Exception as e:
         print(f"❌ Error fetching vCenter inventory: {e}")
