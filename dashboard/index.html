@@ -2252,6 +2252,12 @@
               this.showLoginModal = false;
               this.loginForm.username = '';
               this.loginForm.password = '';
+              this.loginError = null;
+              
+              // Force Vue to update the DOM
+              this.$nextTick(() => {
+                console.log('✅ Login modal should now be hidden:', this.showLoginModal);
+              });
               
               // Set default tab based on permissions
               if (this.auth.permissions.can_view_dashboard) {
@@ -2261,6 +2267,11 @@
               }
               
               this.showNotification('Successfully logged in!', 'success');
+              
+              // Load dashboard data after successful login
+              await this.loadSystemInfo();
+              await this.checkEndpointStatus();
+              await this.loadIntegrationConfig();
             } else {
               this.loginError = data.detail || 'Login failed. Please check your credentials.';
             }
@@ -2367,12 +2378,16 @@
             }
           }
           
-          // Reset auth state and show login modal if not authenticated
-          this.auth.isAuthenticated = false;
-          this.auth.user = null;
-          this.auth.token = null;
-          this.showLoginModal = true;
-          console.log('❌ Not authenticated, showing login modal');
+          // Only show login modal if user is not already authenticated
+          // This prevents race conditions during login process
+          if (!this.auth.isAuthenticated) {
+            // Reset auth state and show login modal if not authenticated
+            this.auth.isAuthenticated = false;
+            this.auth.user = null;
+            this.auth.token = null;
+            this.showLoginModal = true;
+            console.log('❌ Not authenticated, showing login modal');
+          }
           return false;
         },
         
