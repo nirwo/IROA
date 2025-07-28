@@ -105,30 +105,34 @@ start_frontend() {
     
     # Check if Node.js is available
     if ! command -v node &> /dev/null; then
-        print_warning "Node.js not found. Starting simple HTTP server..."
-        
-        # Use Python HTTP server as fallback
-        if command -v python3 &> /dev/null; then
-            print_status "Starting Python HTTP server on port 3000..."
-            cd dashboard
-            python3 -m http.server 3000 --bind 0.0.0.0 > ../logs/frontend.log 2>&1 &
-            echo $! > ../frontend.pid
-            cd ..
-        elif command -v python &> /dev/null; then
-            print_status "Starting Python HTTP server on port 3000..."
-            cd dashboard
-            python -m SimpleHTTPServer 3000 > ../logs/frontend.log 2>&1 &
-            echo $! > ../frontend.pid
-            cd ..
-        else
-            print_error "No suitable HTTP server found. Please install Node.js or Python."
-            exit 1
-        fi
-    else
-        # Use Node.js HTTP server
-        print_status "Starting Node.js HTTP server on port 3000..."
+        print_error "Node.js is required for the IROA dashboard. Please install Node.js and try again."
+        exit 1
+    fi
+    
+    # Check if we're in development or production mode
+    if [[ "$NODE_ENV" == "production" ]]; then
+        # Use Node.js production server
+        print_status "Starting production frontend server on port 3000..."
         cd dashboard
-        npx http-server -p 3000 -a 0.0.0.0 -c-1 > ../logs/frontend.log 2>&1 &
+        npm run start > ../logs/frontend.log 2>&1 &
+        echo $! > ../frontend.pid
+        cd ..
+    else
+        # Use Vite development server with hot reloading
+        print_status "Starting Vite development server on port 3000..."
+        cd dashboard
+        
+        # Install dependencies if node_modules doesn't exist
+        if [ ! -d "node_modules" ]; then
+            print_status "Installing dashboard dependencies..."
+            npm install || {
+                print_error "Failed to install dashboard dependencies"
+                exit 1
+            }
+        fi
+        
+        # Start Vite dev server
+        npm run dev -- --port 3000 --host 0.0.0.0 > ../logs/frontend.log 2>&1 &
         echo $! > ../frontend.pid
         cd ..
     fi
