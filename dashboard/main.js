@@ -1443,8 +1443,8 @@ const app = createApp({
                         </div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="text-sm text-gray-900">${{ (pool.cost_per_license * pool.total_licenses).toFixed(2) }}</div>
-                        <div class="text-sm text-gray-500">${{ pool.cost_per_license }}/license</div>
+                        <div class="text-sm text-gray-900">${{ formatCurrency((pool.cost_per_license || 0) * (pool.total_licenses || 0)) }}</div>
+                        <div class="text-sm text-gray-500">${{ formatCurrency(pool.cost_per_license || 0) }}/license</div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
                         <div v-if="pool.renewal_date" :class="['text-sm', isExpiringSoon(pool.renewal_date) ? 'text-red-600 font-medium' : 'text-gray-900']">
@@ -5004,6 +5004,10 @@ const app = createApp({
     formatDate(dateString) {
       if (!dateString) return '';
       return new Date(dateString).toLocaleDateString();
+    },
+
+    formatCurrency(amount) {
+      return (amount || 0).toFixed(2);
     }
   }
 });
