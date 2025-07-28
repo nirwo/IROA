@@ -275,7 +275,7 @@ const app = createApp({
                         </div>
                         <div>
                           <span class="text-gray-500">Avg Memory:</span>
-                          <span class="font-medium ml-1">{{ rec.details.avg_mem }}%</span>
+                          <span class="font-medium ml-1">{{ rec.details?.avg_mem || 0 }}%</span>
                         </div>
                       </div>
                     </div>
@@ -304,11 +304,11 @@ const app = createApp({
             <div class="bg-white rounded-xl shadow-sm p-6">
               <div class="flex items-center justify-between mb-6">
                 <h2 class="text-xl font-semibold">Virtual Machines</h2>
-                <div class="flex space-x-3">
+                <div class="flex flex-wrap space-x-3 space-y-2">
                   <input 
                     v-model="searchTerm" 
-                    placeholder="Search VMs..." 
-                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Search VMs, clusters, hosts..." 
+                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-w-64"
                   >
                   <select 
                     v-model="filterStatus" 
@@ -318,6 +318,33 @@ const app = createApp({
                     <option value="running">Running</option>
                     <option value="stopped">Stopped</option>
                     <option value="underutilized">Underutilized</option>
+                    <option value="overutilized">Overutilized</option>
+                  </select>
+                  <select 
+                    v-model="vmFilters.cluster" 
+                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">All Clusters</option>
+                    <option v-for="cluster in availableClusters" :key="cluster" :value="cluster">{{ cluster }}</option>
+                  </select>
+                  <select 
+                    v-model="vmFilters.os" 
+                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">All OS</option>
+                    <option value="windows">Windows</option>
+                    <option value="linux">Linux</option>
+                    <option value="ubuntu">Ubuntu</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <select 
+                    v-model="vmFilters.resourceFilter" 
+                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">All Resources</option>
+                    <option value="high-cpu">High CPU (>80%)</option>
+                    <option value="high-memory">High Memory (>80%)</option>
+                    <option value="low-resources">Low Resources (<20%)</option>
                   </select>
                   <div class="flex bg-gray-100 rounded-lg p-1">
                     <button 
@@ -528,7 +555,7 @@ const app = createApp({
                     <div class="flex items-center justify-between">
                       <div>
                         <p class="text-sm font-medium text-gray-600">Total Capacity</p>
-                        <p class="text-2xl font-bold text-indigo-600">{{ capacityData.current_infrastructure?.max_additional_vms || 0 }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ capacityData.summary?.max_additional_vms || 0 }}</p>
                         <p class="text-xs text-gray-500">Additional VMs</p>
                       </div>
                       <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
@@ -540,9 +567,9 @@ const app = createApp({
                   <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6">
                     <div class="flex items-center justify-between">
                       <div>
-                        <p class="text-sm font-medium text-gray-600">CPU Cores</p>
-                        <p class="text-2xl font-bold text-green-600">{{ capacityData.current_infrastructure?.total_cpu_cores || 0 }}</p>
-                        <p class="text-xs text-gray-500">Available</p>
+                        <p class="text-sm font-medium text-gray-600">vCPUs</p>
+                        <p class="text-2xl font-bold text-green-600">{{ capacityData.summary?.available_vcpus || 0 }}</p>
+                        <p class="text-xs text-gray-500">Available vCPUs</p>
                       </div>
                       <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                         <i data-lucide="cpu" class="w-6 h-6 text-green-600"></i>
@@ -554,7 +581,7 @@ const app = createApp({
                     <div class="flex items-center justify-between">
                       <div>
                         <p class="text-sm font-medium text-gray-600">Memory</p>
-                        <p class="text-2xl font-bold text-purple-600">{{ Math.round(capacityData.current_infrastructure?.total_memory_gb || 0) }}GB</p>
+                        <p class="text-2xl font-bold text-purple-600">{{ Math.round(capacityData.summary?.available_memory_gb || 0) }}GB</p>
                         <p class="text-xs text-gray-500">Total Available</p>
                       </div>
                       <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -567,7 +594,7 @@ const app = createApp({
                     <div class="flex items-center justify-between">
                       <div>
                         <p class="text-sm font-medium text-gray-600">Storage</p>
-                        <p class="text-2xl font-bold text-orange-600">{{ Math.round(capacityData.current_infrastructure?.total_storage_gb || 0) }}GB</p>
+                        <p class="text-2xl font-bold text-orange-600">{{ Math.round(capacityData.summary?.total_storage_gb || 0) }}GB</p>
                         <p class="text-xs text-gray-500">Total Capacity</p>
                       </div>
                       <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -618,7 +645,7 @@ const app = createApp({
                                     'h-2 rounded-full',
                                     cluster.cpu_utilization < 50 ? 'bg-green-500' : cluster.cpu_utilization < 80 ? 'bg-yellow-500' : 'bg-red-500'
                                   ]"
-                                  :style="{ width: cluster.cpu_utilization + '%' }"
+                                  :style="{ width: Math.min(100, cluster.cpu_utilization) + '%' }"
                                 ></div>
                               </div>
                               <span class="text-sm text-gray-600">{{ cluster.cpu_utilization }}%</span>
@@ -632,7 +659,7 @@ const app = createApp({
                                     'h-2 rounded-full',
                                     cluster.memory_utilization < 50 ? 'bg-green-500' : cluster.memory_utilization < 80 ? 'bg-yellow-500' : 'bg-red-500'
                                   ]"
-                                  :style="{ width: cluster.memory_utilization + '%' }"
+                                  :style="{ width: Math.min(100, cluster.memory_utilization) + '%' }"
                                 ></div>
                               </div>
                               <span class="text-sm text-gray-600">{{ cluster.memory_utilization }}%</span>
@@ -708,24 +735,24 @@ const app = createApp({
                   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div v-for="profile in profileData.profiles_discovered" :key="profile.profile_name" class="border border-gray-200 rounded-lg p-6 hover:border-indigo-300 transition-colors">
                       <div class="flex items-center justify-between mb-4">
-                        <h4 class="text-lg font-semibold text-gray-900">{{ profile.profile_name }}</h4>
+                        <h4 class="text-lg font-semibold text-gray-900">{{ profile.profile_name || 'Unknown Profile' }}</h4>
                         <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium">
-                          {{ profile.current_count }} VMs
+                          {{ profile.current_count || 0 }} VMs
                         </span>
                       </div>
                       
                       <div class="space-y-3 mb-4">
                         <div class="flex justify-between text-sm">
                           <span class="text-gray-600">CPU per VM:</span>
-                          <span class="font-medium">{{ profile.profile_specs.cpu }} vCPUs</span>
+                          <span class="font-medium">{{ profile.profile_specs?.cpu || 0 }} vCPUs</span>
                         </div>
                         <div class="flex justify-between text-sm">
                           <span class="text-gray-600">Memory per VM:</span>
-                          <span class="font-medium">{{ profile.profile_specs.memory }}GB</span>
+                          <span class="font-medium">{{ profile.profile_specs?.memory || 0 }}GB</span>
                         </div>
                         <div class="flex justify-between text-sm">
                           <span class="text-gray-600">Storage per VM:</span>
-                          <span class="font-medium">{{ profile.profile_specs.disk }}GB</span>
+                          <span class="font-medium">{{ profile.profile_specs?.disk || 0 }}GB</span>
                         </div>
                       </div>
                       
@@ -751,19 +778,19 @@ const app = createApp({
                         <div>
                           <div class="flex justify-between text-xs mb-1">
                             <span>CPU Usage</span>
-                            <span>{{ profile.profile_cpu_usage_percent }}%</span>
+                            <span>{{ profile.profile_cpu_usage_percent || 0 }}%</span>
                           </div>
                           <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="bg-blue-500 h-2 rounded-full" :style="{ width: profile.profile_cpu_usage_percent + '%' }"></div>
+                            <div class="bg-blue-500 h-2 rounded-full" :style="{ width: (profile.profile_cpu_usage_percent || 0) + '%' }"></div>
                           </div>
                         </div>
                         <div>
                           <div class="flex justify-between text-xs mb-1">
                             <span>Memory Usage</span>
-                            <span>{{ profile.profile_memory_usage_percent }}%</span>
+                            <span>{{ profile.profile_memory_usage_percent || 0 }}%</span>
                           </div>
                           <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="bg-green-500 h-2 rounded-full" :style="{ width: profile.profile_memory_usage_percent + '%' }"></div>
+                            <div class="bg-green-500 h-2 rounded-full" :style="{ width: (profile.profile_memory_usage_percent || 0) + '%' }"></div>
                           </div>
                         </div>
                       </div>
@@ -1279,6 +1306,82 @@ const app = createApp({
                   Create Workload Group
                 </button>
               </div>
+            </div>
+          </div>
+
+          <!-- Create Workload Modal -->
+          <div v-if="showCreateWorkloadModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Create Workload Group</h3>
+                <button @click="showCreateWorkloadModal = false" class="text-gray-400 hover:text-gray-600">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+              </div>
+              
+              <form @submit.prevent="createWorkloadGroup" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Workload Name</label>
+                  <input 
+                    v-model="newWorkload.name" 
+                    type="text" 
+                    required
+                    placeholder="e.g., Production Web Servers"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea 
+                    v-model="newWorkload.description" 
+                    rows="3"
+                    placeholder="Brief description of this workload group"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  ></textarea>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Customer Facing Name</label>
+                  <input 
+                    v-model="newWorkload.customerName" 
+                    type="text" 
+                    required
+                    placeholder="e.g., Web Applications"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                  <p class="text-xs text-gray-500 mt-1">This name will be visible to customers instead of cluster names</p>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Environment</label>
+                  <select 
+                    v-model="newWorkload.environment" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                    <option value="testing">Testing</option>
+                  </select>
+                </div>
+                
+                <div class="flex justify-end space-x-3 pt-4">
+                  <button 
+                    type="button" 
+                    @click="showCreateWorkloadModal = false"
+                    class="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Create Workload
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
 
@@ -2181,6 +2284,11 @@ const app = createApp({
       searchTerm: '',
       filterStatus: 'all',
       viewMode: 'grid',
+      vmFilters: {
+        cluster: '',
+        os: '',
+        resourceFilter: ''
+      },
       selectedVM: null,
       recommendations: [],
       underutilizedVMs: [],
@@ -2426,6 +2534,12 @@ const app = createApp({
         search: ''
       },
       showCreateWorkloadModal: false,
+      newWorkload: {
+        name: '',
+        description: '',
+        customerName: '',
+        environment: 'production'
+      },
 
       // License Management
       licensePools: [],
@@ -2460,22 +2574,69 @@ const app = createApp({
         ? this.vcenterInventory.vms 
         : this.mockVMs;
       
+      // Text search across multiple fields
       if (this.searchTerm) {
+        const searchLower = this.searchTerm.toLowerCase();
         vms = vms.filter(vm => 
-          vm.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-          (vm.cluster && vm.cluster.toLowerCase().includes(this.searchTerm.toLowerCase()))
+          vm.name.toLowerCase().includes(searchLower) ||
+          (vm.cluster && vm.cluster.toLowerCase().includes(searchLower)) ||
+          (vm.host && vm.host.toLowerCase().includes(searchLower)) ||
+          (vm.guest_os && vm.guest_os.toLowerCase().includes(searchLower)) ||
+          (vm.datacenter && vm.datacenter.toLowerCase().includes(searchLower))
         );
       }
       
+      // Status filtering
       if (this.filterStatus !== 'all') {
         if (this.filterStatus === 'underutilized') {
-          vms = vms.filter(vm => (vm.cpu || 0) < 10 && (vm.memory_usage || 0) < 20);
+          vms = vms.filter(vm => (vm.cpu || 0) < 20 && (vm.memory_usage || 0) < 30);
+        } else if (this.filterStatus === 'overutilized') {
+          vms = vms.filter(vm => (vm.cpu || 0) > 80 || (vm.memory_usage || 0) > 80);
         } else {
           vms = vms.filter(vm => vm.status === this.filterStatus);
         }
       }
       
+      // Cluster filtering
+      if (this.vmFilters.cluster) {
+        vms = vms.filter(vm => vm.cluster === this.vmFilters.cluster);
+      }
+      
+      // OS filtering
+      if (this.vmFilters.os) {
+        vms = vms.filter(vm => {
+          const os = (vm.guest_os || '').toLowerCase();
+          if (this.vmFilters.os === 'windows') return os.includes('windows');
+          if (this.vmFilters.os === 'linux') return os.includes('linux') && !os.includes('ubuntu');
+          if (this.vmFilters.os === 'ubuntu') return os.includes('ubuntu');
+          if (this.vmFilters.os === 'other') return !os.includes('windows') && !os.includes('linux');
+          return false;
+        });
+      }
+      
+      // Resource filtering
+      if (this.vmFilters.resourceFilter) {
+        vms = vms.filter(vm => {
+          const cpu = vm.cpu || 0;
+          const memory = vm.memory_usage || 0;
+          if (this.vmFilters.resourceFilter === 'high-cpu') return cpu > 80;
+          if (this.vmFilters.resourceFilter === 'high-memory') return memory > 80;
+          if (this.vmFilters.resourceFilter === 'low-resources') return cpu < 20 && memory < 20;
+          return false;
+        });
+      }
+      
       return vms;
+    },
+
+    availableClusters() {
+      // Get unique clusters from VM data
+      const vms = this.vcenterInventory.hasSyncedData && this.vcenterInventory.vms.length > 0 
+        ? this.vcenterInventory.vms 
+        : this.mockVMs;
+      
+      const clusters = [...new Set(vms.map(vm => vm.cluster).filter(Boolean))];
+      return clusters.sort();
     },
 
     // Workload computed properties
@@ -2514,9 +2675,7 @@ const app = createApp({
   watch: {
     activeTab(newTab) {
       // Save current tab to localStorage for persistence across refreshes
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('iroa_activeTab', newTab);
-      }
+      this.safeLocalStorageSet('iroa_activeTab', newTab);
     }
   },
   async mounted() {
@@ -2524,6 +2683,9 @@ const app = createApp({
     
     // Initialize API base URL
     this.apiBaseUrl = this.getApiBaseUrl();
+    
+    // Clean up any corrupted localStorage data
+    this.cleanupLocalStorage();
     
     // Initialize active tab from localStorage
     if (typeof localStorage !== 'undefined') {
@@ -2602,24 +2764,29 @@ const app = createApp({
         this.isAuthenticated = true;
         
         // Restore user data
-        if (userData) {
+        if (userData && userData !== '[object Object]') {
           try {
             const user = JSON.parse(userData);
-            this.currentUser = {
-              id: user.id,
-              username: user.username,
-              role: user.role,
-              permissions: user.permissions,
-              profile: {
-                fullName: user.fullName,
-                email: user.email,
-                department: user.department,
-                lastLogin: user.lastLogin
-              }
-            };
-            console.log('✅ Valid session found, user role:', this.currentUser.role);
+            if (user && typeof user === 'object') {
+              this.currentUser = {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                permissions: user.permissions || { pages: [], data: [] },
+                profile: {
+                  fullName: user.fullName || '',
+                  email: user.email || '',
+                  department: user.department || '',
+                  lastLogin: user.lastLogin || null
+                }
+              };
+              console.log('✅ Valid session found, user role:', this.currentUser.role);
+            } else {
+              throw new Error('Invalid user object structure');
+            }
           } catch (error) {
             console.error('Error parsing user data:', error);
+            this.cleanupLocalStorage();
             this.logout();
             return;
           }
@@ -2698,9 +2865,9 @@ const app = createApp({
             const expiry = new Date().getTime() + (24 * 60 * 60 * 1000); // 24 hours
             
             // Store session
-            localStorage.setItem('iroa_session_token', token);
-            localStorage.setItem('iroa_session_expiry', expiry.toString());
-            localStorage.setItem('iroa_current_user', JSON.stringify(loginUser));
+            this.safeLocalStorageSet('iroa_session_token', token);
+            this.safeLocalStorageSet('iroa_session_expiry', expiry.toString());
+            this.safeLocalStorageSet('iroa_current_user', loginUser);
             
             // Set authentication state
             this.sessionToken = token;
@@ -2742,11 +2909,57 @@ const app = createApp({
       }
     },
     
+    cleanupLocalStorage() {
+      // Clean up any corrupted localStorage data that might cause JSON.parse errors
+      if (typeof localStorage === 'undefined') return;
+      
+      const keysToCheck = ['iroa_current_user', 'iroa_session_token', 'iroa_session_expiry', 'iroa_activeTab'];
+      
+      keysToCheck.forEach(key => {
+        try {
+          const value = localStorage.getItem(key);
+          if (value) {
+            // If it's supposed to be JSON (current_user), try to parse it
+            if (key === 'iroa_current_user') {
+              JSON.parse(value);
+            }
+            // Check if value is "[object Object]" which indicates improper storage
+            if (value === '[object Object]') {
+              console.warn(`Removing corrupted localStorage key: ${key}`);
+              localStorage.removeItem(key);
+            }
+          }
+        } catch (error) {
+          console.warn(`Removing corrupted localStorage key: ${key}`, error);
+          localStorage.removeItem(key);
+        }
+      });
+    },
+
+    safeLocalStorageSet(key, value) {
+      // Safely store data to localStorage with proper serialization
+      if (typeof localStorage === 'undefined') return false;
+      
+      try {
+        let valueToStore = value;
+        if (typeof value === 'object' && value !== null) {
+          valueToStore = JSON.stringify(value);
+        }
+        localStorage.setItem(key, valueToStore);
+        return true;
+      } catch (error) {
+        console.error(`Failed to store to localStorage: ${key}`, error);
+        return false;
+      }
+    },
+
     logout() {
       // Clear session data
-      localStorage.removeItem('iroa_session_token');
-      localStorage.removeItem('iroa_session_expiry');
-      localStorage.removeItem('iroa_current_user');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('iroa_session_token');
+        localStorage.removeItem('iroa_session_expiry');
+        localStorage.removeItem('iroa_current_user');
+      }
       
       this.isAuthenticated = false;
       this.sessionToken = null;
@@ -3389,9 +3602,14 @@ const app = createApp({
         }
         
         // If we have real vCenter data, calculate capacity from it
-        if (this.vcenterInventory.hasSyncedData && this.vcenterInventory.clusters.length > 0) {
+        if (this.vcenterInventory.hasSyncedData && this.vcenterInventory.vms.length > 0) {
           console.log('📊 Calculating capacity from real vCenter data');
-          this.capacityData = this.calculateCapacityFromVCenterData();
+          this.capacityData = this.calculateCapacityFromVCenterData(this.selectedCluster);
+          
+          // Update available clusters
+          const allClusters = [...new Set(this.vcenterInventory.vms.map(vm => vm.cluster).filter(Boolean))];
+          this.clusters = allClusters.sort();
+          
           return;
         }
         
@@ -3431,67 +3649,129 @@ const app = createApp({
       }
     },
 
-    calculateCapacityFromVCenterData() {
+    calculateCapacityFromVCenterData(selectedCluster = null) {
       // Calculate capacity planning data from real vCenter inventory
-      const vms = this.vcenterInventory.vms;
-      const clusters = this.vcenterInventory.clusters;
-      const hosts = this.vcenterInventory.hosts;
+      let vms = this.vcenterInventory.vms || [];
+      const clusters = this.vcenterInventory.clusters || [];
+      const hosts = this.vcenterInventory.hosts || [];
       
-      // Calculate overall totals
-      const totalCpuCores = hosts.reduce((sum, host) => sum + (host.cpu_cores || 0), 0);
-      const totalMemoryGB = hosts.reduce((sum, host) => sum + (host.memory_gb || 0), 0);
+      // If a specific cluster is selected, filter the data
+      let filteredHosts = hosts;
+      if (selectedCluster) {
+        vms = vms.filter(vm => vm.cluster === selectedCluster);
+        filteredHosts = hosts.filter(host => host.cluster === selectedCluster);
+        console.log(`📊 Calculating capacity for cluster "${selectedCluster}":`, { vms: vms.length, hosts: filteredHosts.length });
+      } else {
+        console.log('📊 Calculating capacity from all clusters:', { vms: vms.length, hosts: filteredHosts.length });
+      }
+      
+      // Calculate physical host resources
+      let totalPhysicalCpuCores = filteredHosts.reduce((sum, host) => sum + (host.cpu_cores || 0), 0);
+      let totalMemoryGB = filteredHosts.reduce((sum, host) => sum + (host.memory_gb || 0), 0);
+      
+      // Calculate vCPU allocation and usage
+      const totalAllocatedVCpus = vms.reduce((sum, vm) => sum + (vm.cores || 0), 0);
+      const totalUsedMemoryGB = vms.reduce((sum, vm) => sum + (vm.memory || 0), 0);
+      
+      // Calculate actual CPU usage across all VMs
+      const totalActualCpuUsage = vms.reduce((sum, vm) => {
+        const vmVCpus = vm.cores || 0;
+        const vmCpuPercent = vm.cpu || 0;
+        return sum + (vmVCpus * (vmCpuPercent / 100));
+      }, 0);
+      
+      // If no host data, estimate physical capacity (4:1 vCPU overcommit)
+      if (totalPhysicalCpuCores === 0 && vms.length > 0) {
+        totalPhysicalCpuCores = Math.ceil(totalAllocatedVCpus / 4); // 4:1 overcommit
+      }
+      
+      if (totalMemoryGB === 0 && vms.length > 0) {
+        totalMemoryGB = Math.ceil(totalUsedMemoryGB * 1.2); // 20% overhead
+      }
+      
       const totalVMs = vms.length;
-      const runningVMs = vms.filter(vm => vm.status === 'running').length;
+      const runningVMs = vms.filter(vm => vm.status === 'running' || vm.power_state === 'poweredOn').length;
       
-      // Calculate used resources
-      const usedCpuCores = vms.reduce((sum, vm) => sum + (vm.cores || 0), 0);
-      const usedMemoryGB = vms.reduce((sum, vm) => sum + (vm.memory || 0), 0);
-      
-      // Calculate available resources
-      const availableCpuCores = Math.max(0, totalCpuCores - usedCpuCores);
-      const availableMemoryGB = Math.max(0, totalMemoryGB - usedMemoryGB);
+      // Calculate vCPU capacity and availability
+      const maxVCpuCapacity = totalPhysicalCpuCores * 4; // 4:1 overcommit ratio
+      const availableVCpus = Math.max(0, maxVCpuCapacity - totalAllocatedVCpus);
+      const availableMemoryGB = Math.max(0, totalMemoryGB - totalUsedMemoryGB);
       
       // Estimate max additional VMs (assuming average VM resource usage)
-      const avgVMCores = vms.length > 0 ? usedCpuCores / vms.length : 2;
-      const avgVMMemory = vms.length > 0 ? usedMemoryGB / vms.length : 4;
+      const avgVMCores = vms.length > 0 ? totalAllocatedVCpus / vms.length : 2;
+      const avgVMMemory = vms.length > 0 ? totalUsedMemoryGB / vms.length : 4;
       
       const maxAdditionalByMemory = Math.floor(availableMemoryGB / avgVMMemory);
-      const maxAdditionalByCpu = Math.floor(availableCpuCores / avgVMCores);
+      const maxAdditionalByCpu = Math.floor(availableVCpus / avgVMCores);
       const maxAdditionalVMs = Math.min(maxAdditionalByMemory, maxAdditionalByCpu);
       
-      // Process clusters
-      const clusterAnalysis = clusters.map(cluster => {
-        const clusterVMs = vms.filter(vm => vm.cluster === cluster.name);
-        const clusterHosts = hosts.filter(host => host.cluster === cluster.name);
+      // Process clusters - if a specific cluster is selected, only analyze that one
+      let clusterNames = [];
+      if (selectedCluster) {
+        clusterNames = [selectedCluster];
+      } else if (clusters.length > 0) {
+        clusterNames = clusters.map(c => c.name);
+      } else {
+        // Extract cluster names from VMs
+        clusterNames = [...new Set(vms.map(vm => vm.cluster).filter(Boolean))];
+      }
+      
+      const clusterAnalysis = clusterNames.map(clusterName => {
+        const clusterVMs = vms.filter(vm => vm.cluster === clusterName);
+        const clusterHosts = hosts.filter(host => host.cluster === clusterName);
         
-        const clusterTotalCpu = clusterHosts.reduce((sum, host) => sum + (host.cpu_cores || 0), 0);
-        const clusterTotalMemory = clusterHosts.reduce((sum, host) => sum + (host.memory_gb || 0), 0);
-        const clusterUsedCpu = clusterVMs.reduce((sum, vm) => sum + (vm.cores || 0), 0);
+        // Get physical host resources
+        let clusterTotalPhysicalCpu = clusterHosts.reduce((sum, host) => sum + (host.cpu_cores || 0), 0);
+        let clusterTotalMemory = clusterHosts.reduce((sum, host) => sum + (host.memory_gb || 0), 0);
+        
+        // Calculate vCPU allocation and actual usage
+        const clusterAllocatedVCpus = clusterVMs.reduce((sum, vm) => sum + (vm.cores || 0), 0);
         const clusterUsedMemory = clusterVMs.reduce((sum, vm) => sum + (vm.memory || 0), 0);
         
-        const cpuUtilization = clusterTotalCpu > 0 ? Math.round((clusterUsedCpu / clusterTotalCpu) * 100) : 0;
+        // Calculate actual CPU usage (vCPUs * utilization percentage)
+        const clusterActualCpuUsage = clusterVMs.reduce((sum, vm) => {
+          const vmVCpus = vm.cores || 0;
+          const vmCpuPercent = vm.cpu || 0; // CPU utilization percentage
+          return sum + (vmVCpus * (vmCpuPercent / 100));
+        }, 0);
+        
+        // If no host data, estimate physical capacity (assume 4:1 vCPU overcommit ratio)
+        if (clusterTotalPhysicalCpu === 0 && clusterVMs.length > 0) {
+          clusterTotalPhysicalCpu = Math.ceil(clusterAllocatedVCpus / 4); // 4:1 overcommit
+        }
+        if (clusterTotalMemory === 0 && clusterVMs.length > 0) {
+          clusterTotalMemory = Math.ceil(clusterUsedMemory * 1.2); // 20% overhead
+        }
+        
+        // Calculate utilization based on vCPU allocation (not physical cores)
+        const maxVCpuCapacity = clusterTotalPhysicalCpu * 4; // 4:1 overcommit ratio
+        const cpuAllocationPercent = maxVCpuCapacity > 0 ? Math.round((clusterAllocatedVCpus / maxVCpuCapacity) * 100) : 0;
+        const cpuUsagePercent = maxVCpuCapacity > 0 ? Math.round((clusterActualCpuUsage / maxVCpuCapacity) * 100) : 0;
         const memoryUtilization = clusterTotalMemory > 0 ? Math.round((clusterUsedMemory / clusterTotalMemory) * 100) : 0;
         
-        const clusterAvailableCpu = Math.max(0, clusterTotalCpu - clusterUsedCpu);
+        const clusterAvailableVCpus = Math.max(0, maxVCpuCapacity - clusterAllocatedVCpus);
         const clusterAvailableMemory = Math.max(0, clusterTotalMemory - clusterUsedMemory);
         
         const clusterMaxAdditionalByMemory = Math.floor(clusterAvailableMemory / avgVMMemory);
-        const clusterMaxAdditionalByCpu = Math.floor(clusterAvailableCpu / avgVMCores);
+        const clusterMaxAdditionalByCpu = Math.floor(clusterAvailableVCpus / avgVMCores);
         const clusterMaxAdditional = Math.min(clusterMaxAdditionalByMemory, clusterMaxAdditionalByCpu);
         
         const limitingFactorCpu = clusterMaxAdditionalByCpu <= clusterMaxAdditionalByMemory;
         
         return {
-          cluster: cluster.name,
+          cluster: clusterName,
           current_vms: clusterVMs.length,
-          cpu_utilization: cpuUtilization,
+          cpu_utilization: cpuUsagePercent, // Use actual CPU usage percentage
+          cpu_allocation: cpuAllocationPercent, // vCPU allocation percentage  
           memory_utilization: memoryUtilization,
           max_additional_vms: Math.max(0, clusterMaxAdditional),
           limiting_factor: limitingFactorCpu ? 'CPU' : 'Memory',
           host_count: clusterHosts.length,
-          total_cpu_cores: clusterTotalCpu,
+          physical_cpu_cores: clusterTotalPhysicalCpu,
+          total_vcpu_capacity: maxVCpuCapacity,
+          allocated_vcpus: clusterAllocatedVCpus,
           total_memory_gb: clusterTotalMemory,
-          available_cpu_cores: clusterAvailableCpu,
+          available_vcpus: clusterAvailableVCpus,
           available_memory_gb: clusterAvailableMemory
         };
       });
@@ -3501,14 +3781,16 @@ const app = createApp({
           total_vms: totalVMs,
           running_vms: runningVMs,
           max_additional_vms: Math.max(0, maxAdditionalVMs),
-          total_cpu_cores: totalCpuCores,
+          physical_cpu_cores: totalPhysicalCpuCores,
+          total_vcpu_capacity: maxVCpuCapacity,
+          allocated_vcpus: totalAllocatedVCpus,
           total_memory_gb: Math.round(totalMemoryGB),
-          used_cpu_cores: usedCpuCores,
-          used_memory_gb: Math.round(usedMemoryGB),
-          available_cpu_cores: availableCpuCores,
+          used_memory_gb: Math.round(totalUsedMemoryGB),
+          available_vcpus: availableVCpus,
           available_memory_gb: Math.round(availableMemoryGB),
-          cpu_utilization_percent: totalCpuCores > 0 ? Math.round((usedCpuCores / totalCpuCores) * 100) : 0,
-          memory_utilization_percent: totalMemoryGB > 0 ? Math.round((usedMemoryGB / totalMemoryGB) * 100) : 0,
+          vcpu_allocation_percent: maxVCpuCapacity > 0 ? Math.round((totalAllocatedVCpus / maxVCpuCapacity) * 100) : 0,
+          cpu_usage_percent: maxVCpuCapacity > 0 ? Math.round((totalActualCpuUsage / maxVCpuCapacity) * 100) : 0,
+          memory_utilization_percent: totalMemoryGB > 0 ? Math.round((totalUsedMemoryGB / totalMemoryGB) * 100) : 0,
           limiting_factor: maxAdditionalByCpu <= maxAdditionalByMemory ? 'CPU' : 'Memory'
         },
         clusters: clusterAnalysis,
@@ -4869,6 +5151,62 @@ const app = createApp({
         search: ''
       };
       this.applyWorkloadFilters();
+    },
+
+    async createWorkloadGroup() {
+      try {
+        const workloadData = {
+          name: this.newWorkload.name,
+          description: this.newWorkload.description,
+          customer_facing_name: this.newWorkload.customerName,
+          environment: this.newWorkload.environment,
+          status: 'active'
+        };
+
+        const response = await fetch(`${this.apiBaseUrl}/workload/workload-groups`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.sessionToken}`
+          },
+          body: JSON.stringify(workloadData)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('✅ Workload group created:', result);
+          
+          // Add to local list
+          this.workloadGroups.push({
+            id: result.id || Date.now(),
+            name: workloadData.name,
+            description: workloadData.description,
+            customer_facing_name: workloadData.customer_facing_name,
+            environment: workloadData.environment,
+            status: 'active',
+            cluster_count: 0,
+            vm_count: 0,
+            total_vcpus: 0,
+            total_memory_gb: 0,
+            created_at: new Date().toISOString()
+          });
+          
+          // Reset form and close modal
+          this.newWorkload = {
+            name: '',
+            description: '',
+            customerName: '',
+            environment: 'production'
+          };
+          this.showCreateWorkloadModal = false;
+          
+          console.log('✅ Workload group created successfully');
+        } else {
+          console.error('Failed to create workload group:', response.status);
+        }
+      } catch (error) {
+        console.error('Error creating workload group:', error);
+      }
     },
 
     editWorkload(workload) {

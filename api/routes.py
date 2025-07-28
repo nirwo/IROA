@@ -18,6 +18,7 @@ from .auth import (
 # from monitoring.mac_monitor import MacSystemMonitor  # Temporarily disabled for Docker startup
 import threading
 import time
+from .metrics_collector import metrics_collector
 import psutil
 import platform
 from datetime import datetime, timedelta
