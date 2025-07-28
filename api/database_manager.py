@@ -37,7 +37,8 @@ class InfrastructureDBManager:
             # Read and execute the inventory schemas
             schema_files = [
                 "database/schemas.sql",
-                "database/inventory_schemas.sql"
+                "database/inventory_schemas.sql",
+                "database/workload_schemas.sql"
             ]
             
             with self.get_connection() as conn:
