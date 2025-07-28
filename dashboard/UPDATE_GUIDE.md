@@ -2,7 +2,10 @@
 
 ## 🚨 Issue: Updates Not Showing After Git Pull
 
-When you `git pull` new changes, the dashboard on port 3000 may not show updates immediately due to browser caching and CSS compilation issues.
+When you `git pull` new changes, the dashboard on port 3000 may not show updates immediately due to:
+1. **Browser caching** - Browser caches static files
+2. **CSS compilation** - Tailwind CSS needs to be rebuilt  
+3. **Server restart** - Server needs to reload files
 
 ## ✅ Solution: Use the Update Script
 
@@ -12,14 +15,22 @@ After each `git pull`, run the update script:
 ./update-and-restart.sh
 ```
 
+This script will:
+1. ✅ Rebuild Tailwind CSS styles
+2. ✅ Stop existing server process  
+3. ✅ Start fresh server with cache-busting headers
+4. ✅ Verify server is running properly
+
 **OR** manually run these commands:
 
 ```bash
 # 1. Rebuild CSS (important!)
 npm run build-css
 
-# 2. Restart the server
-pkill -f "node server.js"
+# 2. Stop existing server
+./stop-server.sh
+
+# 3. Start server
 node server.js &
 ```
 
