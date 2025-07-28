@@ -7,6 +7,70 @@ const { createApp } = Vue;
 const app = createApp({
   template: `
     <div class="min-h-screen bg-gray-50">
+      <!-- Notification System -->
+      <div class="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
+        <transition-group name="notification" tag="div">
+          <div
+            v-for="notification in notifications"
+            :key="notification.id"
+            :class="[
+              'p-4 rounded-lg shadow-lg border-l-4 transition-all duration-300 transform',
+              notification.visible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0',
+              {
+                'bg-green-50 border-green-400 text-green-800': notification.type === 'success',
+                'bg-red-50 border-red-400 text-red-800': notification.type === 'error',
+                'bg-yellow-50 border-yellow-400 text-yellow-800': notification.type === 'warning',
+                'bg-blue-50 border-blue-400 text-blue-800': notification.type === 'info'
+              }
+            ]"
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex items-start">
+                <div class="flex-shrink-0 mr-3">
+                  <i 
+                    :class="[
+                      'w-5 h-5',
+                      {
+                        'text-green-600': notification.type === 'success',
+                        'text-red-600': notification.type === 'error',
+                        'text-yellow-600': notification.type === 'warning',
+                        'text-blue-600': notification.type === 'info'
+                      }
+                    ]"
+                    :data-lucide="
+                      notification.type === 'success' ? 'check-circle' :
+                      notification.type === 'error' ? 'x-circle' :
+                      notification.type === 'warning' ? 'alert-triangle' :
+                      'info'
+                    "
+                  ></i>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm font-medium">{{ notification.message }}</p>
+                  <p class="text-xs opacity-75 mt-1">{{ notification.timestamp.toLocaleTimeString() }}</p>
+                </div>
+              </div>
+              <button 
+                @click="removeNotification(notification.id)"
+                class="flex-shrink-0 ml-3 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </transition-group>
+        
+        <!-- Clear All Button (shown when there are notifications) -->
+        <div v-if="notifications.length > 1" class="text-center">
+          <button 
+            @click="clearAllNotifications"
+            class="text-xs text-gray-500 hover:text-gray-700 underline"
+          >
+            Clear All
+          </button>
+        </div>
+      </div>
+
       <!-- Login Screen -->
       <div v-if="!isAuthenticated" class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
         <!-- Header -->
@@ -2550,7 +2614,11 @@ const app = createApp({
         utilization: '',
         expiry: ''
       },
-      showCreateLicensePoolModal: false
+      showCreateLicensePoolModal: false,
+
+      // Notification System
+      notifications: [],
+      notificationId: 0
     };
   },
   computed: {
@@ -2815,7 +2883,7 @@ const app = createApp({
         console.log('Loading user permissions...');
         // In a real app, this would load user roles/permissions from API
       } catch (error) {
-        console.error('Error loading user permissions:', error);
+        this.showError('Error loading user permissions. Some features may be restricted.');
       }
     },
 
@@ -2826,7 +2894,7 @@ const app = createApp({
         await this.checkApiConnection();
         await this.loadData();
       } catch (error) {
-        console.error('Error loading infrastructure:', error);
+        this.showError('Error loading infrastructure data. Dashboard may show incomplete information.');
       }
     },
     
@@ -2890,9 +2958,7 @@ const app = createApp({
             // Update last login
             loginUser.lastLogin = new Date().toISOString();
             
-            console.log('✅ Login successful, isAuthenticated:', this.isAuthenticated);
-            console.log('✅ User role:', this.currentUser.role);
-            console.log('✅ Session token stored:', token);
+            this.showSuccess(`Welcome back, ${this.currentUser.profile?.fullName || this.currentUser.username || 'User'}! Login successful.`);
             
             // Initialize app components after authentication
             this.initializeAuthenticatedApp();
@@ -2903,7 +2969,7 @@ const app = createApp({
         }
       } catch (error) {
         this.loginError = 'Authentication failed. Please try again.';
-        console.error('Login error:', error);
+        this.showError('Login failed. Please check your credentials and network connection.');
       } finally {
         this.isLoggingIn = false;
       }
@@ -2925,12 +2991,10 @@ const app = createApp({
             }
             // Check if value is "[object Object]" which indicates improper storage
             if (value === '[object Object]') {
-              console.warn(`Removing corrupted localStorage key: ${key}`);
               localStorage.removeItem(key);
             }
           }
         } catch (error) {
-          console.warn(`Removing corrupted localStorage key: ${key}`, error);
           localStorage.removeItem(key);
         }
       });
@@ -2948,12 +3012,14 @@ const app = createApp({
         localStorage.setItem(key, valueToStore);
         return true;
       } catch (error) {
-        console.error(`Failed to store to localStorage: ${key}`, error);
+        this.showWarning('Failed to save session data locally.');
         return false;
       }
     },
 
     logout() {
+      const userName = this.currentUser.profile?.fullName || this.currentUser.username || 'User';
+      
       // Clear session data
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('iroa_session_token');
@@ -2997,6 +3063,8 @@ const app = createApp({
         this.forecastChart.destroy();
         this.forecastChart = null;
       }
+      
+      this.showInfo(`Goodbye, ${userName}! You have been logged out successfully.`);
     },
     
     async checkApiConnection() {
@@ -3021,11 +3089,11 @@ const app = createApp({
         clearTimeout(timeoutId);
         this.apiAvailable = response.ok;
         if (this.apiAvailable) {
-          console.log('✅ API server is available');
+          this.showSuccess('API server connection established successfully!');
         }
       } catch (error) {
         this.apiAvailable = false;
-        console.warn('⚠️ API server unavailable, using mock data:', error.message);
+        this.showWarning('API server unavailable. Using mock data for demonstration.');
       }
     },
     
@@ -3050,9 +3118,9 @@ const app = createApp({
             this.initializeCharts();
           });
           
-          console.log('✅ App initialization complete');
+          this.showInfo('IROA Dashboard initialized successfully!');
         } catch (error) {
-          console.error('Error initializing authenticated app:', error);
+          this.showError('Error initializing dashboard. Some features may not work properly.');
           // Don't reset authentication on initialization error
         }
       });
@@ -3072,7 +3140,7 @@ const app = createApp({
           if (recRes.ok) {
             this.recommendations = await recRes.json();
           } else {
-            console.warn('Failed to load recommendations:', recRes.status);
+            this.showWarning('Failed to load live recommendations. Using cached data.');
             this.recommendations = this.getMockRecommendations();
           }
           
@@ -3088,7 +3156,7 @@ const app = createApp({
             // Update stats
             this.stats[1].value = this.underutilizedVMs.length.toString();
           } else {
-            console.warn('Failed to load underutilized VMs:', underRes.status);
+            this.showWarning('Failed to load underutilized VMs data. Using cached information.');
             this.underutilizedVMs = this.getMockUnderutilizedVMs();
             this.stats[1].value = this.underutilizedVMs.length.toString();
           }
@@ -3103,7 +3171,7 @@ const app = createApp({
           this.stats[1].value = this.underutilizedVMs.length.toString();
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        this.showError('Error loading dashboard data. Some information may be outdated.');
         // Set mock data on error
         this.recommendations = this.getMockRecommendations();
         this.underutilizedVMs = this.getMockUnderutilizedVMs();
@@ -3166,7 +3234,7 @@ const app = createApp({
           this.initializeForecastChart();
         });
       } catch (error) {
-        console.error('Error loading forecast:', error);
+        this.showError('Error loading forecast data. Predictions may be unavailable.');
         this.forecast = this.getMockForecast();
         this.selectedVM = this.mockVMs.find(vm => vm.id === vmId);
         this.activeTab = 'analytics';
@@ -3201,7 +3269,7 @@ const app = createApp({
           this.anomalies = [];
         }
       } catch (error) {
-        console.error('Error loading anomalies:', error);
+        this.showError('Error loading anomaly detection data.');
         this.anomalies = [];
       }
     },
@@ -3628,7 +3696,7 @@ const app = createApp({
           
           if (response.ok) {
             this.capacityData = await response.json();
-            console.log('✅ Capacity data loaded from API:', this.capacityData);
+            this.showSuccess('Capacity planning data loaded successfully!');
           } else {
             console.warn('Failed to load capacity data from API:', response.status);
             this.capacityData = this.getMockCapacityData();
@@ -3644,7 +3712,7 @@ const app = createApp({
           this.clusters = [...new Set(this.capacityData.clusters.map(c => c.cluster || c.name || c))];
         }
       } catch (error) {
-        console.error('Error loading capacity data:', error);
+        this.showError('Error loading capacity planning data.');
         this.capacityData = this.getMockCapacityData();
       }
     },
@@ -3830,7 +3898,7 @@ const app = createApp({
           
           if (response.ok) {
             this.profileData = await response.json();
-            console.log('✅ Profile data loaded from API:', this.profileData);
+            this.showSuccess('VM profile data loaded successfully!');
           } else {
             console.warn('Failed to load profile data from API:', response.status);
             this.profileData = this.getMockProfileData();
@@ -3847,7 +3915,7 @@ const app = createApp({
           }
         }
       } catch (error) {
-        console.error('Error loading profile data:', error);
+        this.showError('Error loading VM profile data.');
         this.profileData = this.getMockProfileData();
       }
     },
@@ -4860,7 +4928,7 @@ const app = createApp({
 
     async loadPersistedInventory() {
       // Load persisted infrastructure inventory and connection settings from database on startup
-      console.log('🔄 Loading persisted infrastructure inventory and connection settings...');
+      this.showInfo('Loading infrastructure inventory and connection settings...');
       
       try {
         // Load connection settings first
@@ -4872,8 +4940,9 @@ const app = createApp({
         // Load HyperV inventory from database  
         await this.loadPersistedHyperVInventory();
         
+        this.showSuccess('Infrastructure inventory loaded successfully!');
       } catch (error) {
-        console.error('❌ Error loading persisted inventory:', error);
+        this.showError('Error loading persisted inventory. Some data may be unavailable.');
       }
     },
 
@@ -4905,7 +4974,7 @@ const app = createApp({
                 this.adminData.syncStatus.vcenter.lastSync = config.vcenter.last_sync;
               }
             }
-            console.log('✅ Restored vCenter connection settings');
+            this.showInfo('vCenter connection settings restored successfully.');
           }
           
           // Restore HyperV connection settings
@@ -4930,7 +4999,7 @@ const app = createApp({
           console.warn('Failed to load connection settings:', response.status);
         }
       } catch (error) {
-        console.error('❌ Error loading connection settings:', error);
+        this.showError('Error loading connection settings. Integration may be unavailable.');
       }
     },
 
@@ -4955,7 +5024,7 @@ const app = createApp({
           console.warn('Failed to load persisted vCenter inventory:', response.status);
         }
       } catch (error) {
-        console.error('❌ Error loading persisted vCenter inventory:', error);
+        this.showError('Error loading vCenter inventory data.');
       }
     },
 
@@ -4980,7 +5049,7 @@ const app = createApp({
           console.warn('Failed to load persisted HyperV inventory:', response.status);
         }
       } catch (error) {
-        console.error('❌ Error loading persisted HyperV inventory:', error);
+        this.showError('Error loading HyperV inventory data.');
       }
     },
 
@@ -5103,7 +5172,7 @@ const app = createApp({
           this.workloadGroups = [];
         }
       } catch (error) {
-        console.error('Error loading workload groups:', error);
+        this.showError('Error loading workload groups. Some grouping features may be unavailable.');
         this.workloadGroups = [];
       }
     },
@@ -5174,7 +5243,6 @@ const app = createApp({
 
         if (response.ok) {
           const result = await response.json();
-          console.log('✅ Workload group created:', result);
           
           // Add to local list
           this.workloadGroups.push({
@@ -5200,12 +5268,13 @@ const app = createApp({
           };
           this.showCreateWorkloadModal = false;
           
-          console.log('✅ Workload group created successfully');
+          this.showSuccess(`Workload group "${workloadData.name}" created successfully!`);
         } else {
-          console.error('Failed to create workload group:', response.status);
+          this.showError(`Failed to create workload group: ${response.status} ${response.statusText}`);
         }
       } catch (error) {
         console.error('Error creating workload group:', error);
+        this.showError('Network error while creating workload group. Please try again.');
       }
     },
 
@@ -5261,7 +5330,7 @@ const app = createApp({
           this.licensePools = [];
         }
       } catch (error) {
-        console.error('Error loading license pools:', error);
+        this.showError('Error loading license pool data.');
         this.licensePools = [];
       }
     },
@@ -5360,6 +5429,66 @@ const app = createApp({
 
     formatCurrency(amount) {
       return (amount || 0).toFixed(2);
+    },
+
+    // Notification System Methods
+    showNotification(message, type = 'info', duration = 5000) {
+      const notification = {
+        id: ++this.notificationId,
+        message,
+        type, // 'success', 'error', 'warning', 'info'
+        timestamp: new Date(),
+        visible: true
+      };
+
+      this.notifications.push(notification);
+
+      // Auto-remove notification after duration
+      if (duration > 0) {
+        setTimeout(() => {
+          this.removeNotification(notification.id);
+        }, duration);
+      }
+
+      return notification.id;
+    },
+
+    removeNotification(id) {
+      const index = this.notifications.findIndex(n => n.id === id);
+      if (index > -1) {
+        this.notifications[index].visible = false;
+        // Remove from array after animation completes
+        setTimeout(() => {
+          const newIndex = this.notifications.findIndex(n => n.id === id);
+          if (newIndex > -1) {
+            this.notifications.splice(newIndex, 1);
+          }
+        }, 300);
+      }
+    },
+
+    clearAllNotifications() {
+      this.notifications.forEach(n => n.visible = false);
+      setTimeout(() => {
+        this.notifications = [];
+      }, 300);
+    },
+
+    // Convenience methods for different notification types
+    showSuccess(message, duration = 4000) {
+      return this.showNotification(message, 'success', duration);
+    },
+
+    showError(message, duration = 6000) {
+      return this.showNotification(message, 'error', duration);
+    },
+
+    showWarning(message, duration = 5000) {
+      return this.showNotification(message, 'warning', duration);
+    },
+
+    showInfo(message, duration = 4000) {
+      return this.showNotification(message, 'info', duration);
     }
   }
 });
