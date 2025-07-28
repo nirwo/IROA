@@ -73,7 +73,16 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      res.writeHead(200, { 'Content-Type': contentType });
+      // Set cache-busting headers to prevent browser caching issues
+      const headers = {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'ETag': `"${Date.now()}-${data.length}"`
+      };
+
+      res.writeHead(200, headers);
       res.end(data);
     });
   });
