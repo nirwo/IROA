@@ -86,14 +86,6 @@ const app = createApp({
                     <span v-else>Sign In</span>
                   </button>
                   
-                  <!-- Debug/Skip Button -->
-                  <button 
-                    type="button" 
-                    @click="skipAuth"
-                    class="w-full bg-gray-500 text-white py-2 px-4 rounded-xl hover:bg-gray-600 transition-all text-sm"
-                  >
-                    Skip Authentication (Debug)
-                  </button>
                 </div>
               </form>
               
@@ -1443,8 +1435,8 @@ const app = createApp({
                         </div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="text-sm text-gray-900">${{ formatCurrency((pool.cost_per_license || 0) * (pool.total_licenses || 0)) }}</div>
-                        <div class="text-sm text-gray-500">${{ formatCurrency(pool.cost_per_license || 0) }}/license</div>
+                        <div class="text-sm text-gray-900">{{ '$' + formatCurrency((pool.cost_per_license || 0) * (pool.total_licenses || 0)) }}</div>
+                        <div class="text-sm text-gray-500">{{ '$' + formatCurrency(pool.cost_per_license || 0) }}/license</div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap">
                         <div v-if="pool.renewal_date" :class="['text-sm', isExpiringSoon(pool.renewal_date) ? 'text-red-600 font-medium' : 'text-gray-900']">
@@ -1954,7 +1946,7 @@ const app = createApp({
                   <form @submit.prevent="testConnection('zabbix')" class="space-y-4">
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">Zabbix API URL</label>
-                      <input v-model="adminData.connectionForms.zabbix.url" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="http://zabbix.local/api_jsonrpc.php">
+                      <input v-model="adminData.connectionForms.zabbix.url" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="http://your-zabbix-server/api_jsonrpc.php">
                     </div>
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
@@ -2158,10 +2150,9 @@ const app = createApp({
   `,
   data() {
     return {
-      appLoaded: true,
+      appLoaded: false,
       isAuthenticated: false,
       isLoggingIn: false,
-      skipAuth: false,
       loginError: '',
       loginForm: {
         username: '',
@@ -2185,7 +2176,7 @@ const app = createApp({
           lastLogin: null
         }
       },
-      activeTab: localStorage.getItem('iroa_activeTab') || 'overview',  // Persist active tab across refreshes
+      activeTab: 'overview',  // Will be initialized in created() hook
       loading: false,
       searchTerm: '',
       filterStatus: 'all',
@@ -2376,7 +2367,7 @@ const app = createApp({
         connectionForms: {
           vcenter: { host: 'vcenter.local', username: 'administrator@vsphere.local', password: '' },
           hyperv: { host: 'hyperv-host.local', username: 'Administrator', password: '' },
-          zabbix: { url: 'http://zabbix.local/api_jsonrpc.php', username: 'Admin', password: '' },
+          zabbix: { url: '', username: 'Admin', password: '' },
           prometheus: { url: 'http://localhost:9090', username: '', password: '' }
         },
         syncStatus: {
@@ -2425,7 +2416,27 @@ const app = createApp({
             syncInterval: 30 // 30 seconds
           }
         }
-      }
+      },
+
+      // Workload Management
+      workloadGroups: [],
+      workloadFilters: {
+        status: '',
+        capacity: '',
+        search: ''
+      },
+      showCreateWorkloadModal: false,
+
+      // License Management
+      licensePools: [],
+      licenseSummary: null,
+      licenseFilters: {
+        workloadGroup: '',
+        licenseType: '',
+        utilization: '',
+        expiry: ''
+      },
+      showCreateLicensePoolModal: false
     };
   },
   computed: {
@@ -2467,32 +2478,45 @@ const app = createApp({
       return vms;
     },
 
-    // Workload Management
-    workloadGroups: [],
-    filteredWorkloadGroups: [],
-    workloadFilters: {
-      status: '',
-      capacity: '',
-      search: ''
+    // Workload computed properties
+    filteredWorkloadGroups() {
+      let workloads = this.workloadGroups;
+      
+      if (this.workloadFilters.search) {
+        workloads = workloads.filter(w => 
+          w.name.toLowerCase().includes(this.workloadFilters.search.toLowerCase()) ||
+          w.description.toLowerCase().includes(this.workloadFilters.search.toLowerCase())
+        );
+      }
+      
+      if (this.workloadFilters.status) {
+        workloads = workloads.filter(w => w.status === this.workloadFilters.status);
+      }
+      
+      return workloads;
     },
-    showCreateWorkloadModal: false,
 
-    // License Management
-    licensePools: [],
-    filteredLicensePools: [],
-    licenseSummary: null,
-    licenseFilters: {
-      workloadGroup: '',
-      licenseType: '',
-      utilization: '',
-      expiry: ''
-    },
-    showCreateLicensePoolModal: false
+    // License computed properties
+    filteredLicensePools() {
+      let pools = this.licensePools;
+      
+      if (this.licenseFilters.workloadGroup) {
+        pools = pools.filter(p => p.workload_group === this.licenseFilters.workloadGroup);
+      }
+      
+      if (this.licenseFilters.licenseType) {
+        pools = pools.filter(p => p.license_type === this.licenseFilters.licenseType);
+      }
+      
+      return pools;
+    }
   },
   watch: {
     activeTab(newTab) {
       // Save current tab to localStorage for persistence across refreshes
-      localStorage.setItem('iroa_activeTab', newTab);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('iroa_activeTab', newTab);
+      }
     }
   },
   async mounted() {
@@ -2500,6 +2524,11 @@ const app = createApp({
     
     // Initialize API base URL
     this.apiBaseUrl = this.getApiBaseUrl();
+    
+    // Initialize active tab from localStorage
+    if (typeof localStorage !== 'undefined') {
+      this.activeTab = localStorage.getItem('iroa_activeTab') || 'overview';
+    }
     
     // Check authentication status
     await this.checkAuthStatus();
@@ -2514,6 +2543,9 @@ const app = createApp({
       await this.loadInfrastructure();
       this.initializeAuthenticatedApp();
     }
+    
+    // Mark app as loaded
+    this.appLoaded = true;
   },
   beforeUnmount() {
     if (this.usageChart) {
@@ -2557,6 +2589,8 @@ const app = createApp({
     },
     
     checkExistingSession() {
+      if (typeof localStorage === 'undefined') return false;
+      
       const token = localStorage.getItem('iroa_session_token');
       const expiry = localStorage.getItem('iroa_session_expiry');
       const userData = localStorage.getItem('iroa_current_user');
@@ -2782,26 +2816,6 @@ const app = createApp({
       }
     },
     
-    skipAuth() {
-      console.log('🚨 Skipping authentication for debugging');
-      
-      // Generate a debug session token
-      const token = 'debug_' + Date.now();
-      const expiry = new Date().getTime() + (24 * 60 * 60 * 1000); // 24 hours
-      
-      // Store session
-      localStorage.setItem('iroa_session_token', token);
-      localStorage.setItem('iroa_session_expiry', expiry.toString());
-      
-      // Set authentication state
-      this.sessionToken = token;
-      this.isAuthenticated = true;
-      
-      console.log('🚨 Debug auth set - isAuthenticated:', this.isAuthenticated);
-      
-      // Initialize app components after authentication
-      this.initializeAuthenticatedApp();
-    },
     
     initializeAuthenticatedApp() {
       console.log('🔧 Initializing authenticated app components');

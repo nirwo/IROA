@@ -79,7 +79,7 @@ elif option == "vCenter":
 
 elif option == "Zabbix":
     st.subheader("Zabbix Integration")
-    url = st.text_input("Zabbix API URL", "http://zabbix.local/api_jsonrpc.php")
+    url = st.text_input("Zabbix API URL", placeholder="http://your-zabbix-server/api_jsonrpc.php")
     user = st.text_input("Username", "Admin")
     pwd = st.text_input("Password", type="password")
 
