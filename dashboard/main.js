@@ -2930,12 +2930,7 @@ const app = createApp({
       return pools;
     }
   },
-  watch: {
-    activeTab(newTab) {
-      // Save current tab to localStorage for persistence across refreshes
-      this.safeLocalStorageSet('iroa_activeTab', newTab);
-    }
-  },
+
   async mounted() {
     console.log('🚀 Vue app mounted');
     
@@ -2984,6 +2979,9 @@ const app = createApp({
   },
   watch: {
     activeTab(newTab, oldTab) {
+      // Save current tab to localStorage for persistence across refreshes
+      this.safeLocalStorageSet('iroa_activeTab', newTab);
+      
       // Initialize real-time monitoring when tab is selected
       if (newTab === 'monitoring') {
         this.$nextTick(() => {
@@ -2994,9 +2992,28 @@ const app = createApp({
         // Clean up real-time updates when leaving monitoring tab
         this.stopRealtimeUpdates();
       }
+      
+      // Refresh Lucide icons after tab change
+      this.$nextTick(() => {
+        this.initializeLucideIcons();
+      });
     }
   },
   methods: {
+    // Lucide Icons Initialization
+    initializeLucideIcons() {
+      try {
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+          window.lucide.createIcons();
+          console.log('✅ Lucide icons initialized successfully');
+        } else {
+          console.warn('⚠️ Lucide library not available');
+        }
+      } catch (error) {
+        console.error('❌ Error initializing Lucide icons:', error);
+      }
+    },
+    
     getApiBaseUrl() {
       // Check if we're running from file:// protocol
       if (window.location.protocol === 'file:') {
