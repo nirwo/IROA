@@ -211,9 +211,15 @@
         <div class="bg-white rounded-xl shadow-sm p-6">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-xl font-semibold">Optimization Recommendations</h2>
-            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-              {{ recommendations.length }} Active
-            </span>
+            <div class="flex items-center space-x-3">
+              <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                {{ recommendations.length }} Active
+              </span>
+              <button @click="refreshRecommendations" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all flex items-center space-x-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
           
           <div v-if="loading" class="flex items-center justify-center py-12">
@@ -1120,6 +1126,34 @@ export default {
       await this.checkApiConnection()
       await this.loadData()
       this.initializeCharts()
+    },
+    async refreshRecommendations() {
+      this.loading = true
+      try {
+        if (this.apiAvailable) {
+          // Load recommendations from API
+          const recRes = await fetch(`${this.apiBaseUrl}/recommendations`, {
+            headers: {
+              'Authorization': `Bearer ${this.sessionToken}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (recRes.ok) {
+            this.recommendations = await recRes.json()
+          } else {
+            console.warn('Failed to load recommendations:', recRes.status)
+            this.recommendations = this.getMockRecommendations()
+          }
+        } else {
+          // Use mock data when API is unavailable
+          this.recommendations = this.getMockRecommendations()
+        }
+      } catch (error) {
+        console.error('Error refreshing recommendations:', error)
+        this.recommendations = this.getMockRecommendations()
+      } finally {
+        this.loading = false
+      }
     },
     async getVMForecast(vmId) {
       try {
