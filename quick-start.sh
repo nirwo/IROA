@@ -28,12 +28,19 @@ print_status "Making scripts executable..."
 chmod +x *.sh
 print_success "Scripts are now executable"
 
-# Step 2: Build containers
+# Step 2: Build frontend assets
+print_status "Building frontend assets..."
+./build-frontend.sh || {
+    print_status "Frontend build failed, continuing with existing assets..."
+}
+print_success "Frontend assets ready"
+
+# Step 3: Build containers
 print_status "Building Docker containers..."
 ./build.sh --clean
 print_success "Containers built"
 
-# Step 3: Start system
+# Step 4: Start system
 print_status "Starting IROA system..."
 ./start.sh
 print_success "System started"

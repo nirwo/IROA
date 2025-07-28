@@ -103,41 +103,76 @@ start_docker_services() {
 start_frontend() {
     print_status "Starting frontend server..."
     
-    # Check if Node.js is available
-    if ! command -v node &> /dev/null; then
-        print_error "Node.js is required for the IROA dashboard. Please install Node.js and try again."
-        exit 1
-    fi
-    
-    # Check if we're in development or production mode
-    if [[ "$NODE_ENV" == "production" ]]; then
-        # Use Node.js production server
-        print_status "Starting production frontend server on port 3000..."
-        cd dashboard
-        npm run start > ../logs/frontend.log 2>&1 &
-        echo $! > ../frontend.pid
-        cd ..
-    else
-        # Use Vite development server with hot reloading
-        print_status "Starting Vite development server on port 3000..."
+    # Check if Node.js is available for CSS building
+    if command -v node &> /dev/null; then
         cd dashboard
         
         # Install dependencies if node_modules doesn't exist
         if [ ! -d "node_modules" ]; then
             print_status "Installing dashboard dependencies..."
             npm install || {
-                print_error "Failed to install dashboard dependencies"
-                exit 1
+                print_warning "Failed to install dependencies, using fallback server"
+                cd ..
+                start_fallback_frontend
+                return
             }
         fi
         
-        # Start Vite dev server
-        npm run dev -- --port 3000 --host 0.0.0.0 > ../logs/frontend.log 2>&1 &
-        echo $! > ../frontend.pid
+        # Build CSS to ensure styling consistency
+        print_status "Building Tailwind CSS..."
+        npm run build-css || {
+            print_warning "CSS build failed, using existing CSS"
+        }
+        
+        # Check if we're in development or production mode
+        if [[ "$NODE_ENV" == "production" ]]; then
+            # Use Node.js production server
+            print_status "Starting production frontend server on port 3000..."
+            npm run start > ../logs/frontend.log 2>&1 &
+            echo $! > ../frontend.pid
+        else
+            # Use Vite development server with hot reloading
+            print_status "Starting Vite development server on port 3000..."
+            npm run dev -- --port 3000 --host 0.0.0.0 > ../logs/frontend.log 2>&1 &
+            echo $! > ../frontend.pid
+        fi
         cd ..
+    else
+        print_warning "Node.js not found, using fallback HTTP server"
+        start_fallback_frontend
     fi
     
     print_success "Frontend server started on http://0.0.0.0:3000"
+}
+
+# Fallback frontend server for systems without Node.js
+start_fallback_frontend() {
+    print_status "Starting fallback HTTP server on port 3000..."
+    
+    # Ensure CSS is available (use pre-built version if exists)
+    if [ -f "dashboard/styles/output.css" ]; then
+        print_success "Using existing Tailwind CSS"
+    else
+        print_warning "No compiled CSS found - styling may be incomplete"
+    fi
+    
+    # Use Python HTTP server as fallback
+    if command -v python3 &> /dev/null; then
+        print_status "Starting Python3 HTTP server on port 3000..."
+        cd dashboard
+        python3 -m http.server 3000 --bind 0.0.0.0 > ../logs/frontend.log 2>&1 &
+        echo $! > ../frontend.pid
+        cd ..
+    elif command -v python &> /dev/null; then
+        print_status "Starting Python HTTP server on port 3000..."
+        cd dashboard
+        python -m SimpleHTTPServer 3000 > ../logs/frontend.log 2>&1 &
+        echo $! > ../frontend.pid
+        cd ..
+    else
+        print_error "No suitable HTTP server found. Please install Node.js or Python."
+        exit 1
+    fi
 }
 
 # Wait for services to be ready
