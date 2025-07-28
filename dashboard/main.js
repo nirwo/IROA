@@ -2465,7 +2465,29 @@ const app = createApp({
       }
       
       return vms;
-    }
+    },
+
+    // Workload Management
+    workloadGroups: [],
+    filteredWorkloadGroups: [],
+    workloadFilters: {
+      status: '',
+      capacity: '',
+      search: ''
+    },
+    showCreateWorkloadModal: false,
+
+    // License Management
+    licensePools: [],
+    filteredLicensePools: [],
+    licenseSummary: null,
+    licenseFilters: {
+      workloadGroup: '',
+      licenseType: '',
+      utilization: '',
+      expiry: ''
+    },
+    showCreateLicensePoolModal: false
   },
   watch: {
     activeTab(newTab) {
@@ -4764,6 +4786,224 @@ const app = createApp({
           console.log(`✅ ${type} sync simulation completed! Synchronized ${totalItems} items.`);
         }
       }, 500); // Update every 500ms for demo
+    },
+
+    // Workload Management Methods
+    async loadWorkloadGroups() {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/workload/workload-groups`, {
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          this.workloadGroups = data.workload_groups || [];
+          this.applyWorkloadFilters();
+        } else {
+          console.warn('Failed to load workload groups:', response.status);
+          this.workloadGroups = [];
+        }
+      } catch (error) {
+        console.error('Error loading workload groups:', error);
+        this.workloadGroups = [];
+      }
+    },
+
+    applyWorkloadFilters() {
+      let filtered = [...this.workloadGroups];
+
+      if (this.workloadFilters.status) {
+        filtered = filtered.filter(wg => {
+          if (this.workloadFilters.status === 'active') {
+            return wg.is_active;
+          } else {
+            return !wg.is_active;
+          }
+        });
+      }
+
+      if (this.workloadFilters.capacity) {
+        filtered = filtered.filter(wg => {
+          if (!wg.total_cpu_cores) return false;
+          const utilization = (wg.total_cpu_cores - wg.available_cpu_cores) / wg.total_cpu_cores * 100;
+          if (this.workloadFilters.capacity === 'high') return utilization > 80;
+          if (this.workloadFilters.capacity === 'medium') return utilization >= 50 && utilization <= 80;
+          if (this.workloadFilters.capacity === 'low') return utilization < 50;
+          return true;
+        });
+      }
+
+      if (this.workloadFilters.search) {
+        const search = this.workloadFilters.search.toLowerCase();
+        filtered = filtered.filter(wg => 
+          wg.display_name.toLowerCase().includes(search) ||
+          wg.name.toLowerCase().includes(search) ||
+          (wg.description && wg.description.toLowerCase().includes(search))
+        );
+      }
+
+      this.filteredWorkloadGroups = filtered;
+    },
+
+    clearWorkloadFilters() {
+      this.workloadFilters = {
+        status: '',
+        capacity: '',
+        search: ''
+      };
+      this.applyWorkloadFilters();
+    },
+
+    editWorkload(workload) {
+      // TODO: Implement workload editing modal
+      console.log('Edit workload:', workload);
+    },
+
+    manageWorkloadClusters(workload) {
+      // TODO: Implement cluster management modal
+      console.log('Manage clusters for workload:', workload);
+    },
+
+    async calculateWorkloadCapacity(workloadId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/workload/workload-groups/${workloadId}/calculate-capacity`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Capacity calculated:', data);
+          await this.loadWorkloadGroups(); // Refresh the list
+        } else {
+          console.warn('Failed to calculate capacity:', response.status);
+        }
+      } catch (error) {
+        console.error('Error calculating capacity:', error);
+      }
+    },
+
+    // License Management Methods
+    async loadLicensePools() {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/workload/license-pools`, {
+          headers: {
+            'Authorization': `Bearer ${this.sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          this.licensePools = data.license_pools || [];
+          this.calculateLicenseSummary();
+          this.applyLicenseFilters();
+        } else {
+          console.warn('Failed to load license pools:', response.status);
+          this.licensePools = [];
+        }
+      } catch (error) {
+        console.error('Error loading license pools:', error);
+        this.licensePools = [];
+      }
+    },
+
+    calculateLicenseSummary() {
+      const summary = {
+        totalLicenses: 0,
+        allocatedLicenses: 0,
+        availableLicenses: 0,
+        expiringSoon: 0
+      };
+
+      this.licensePools.forEach(pool => {
+        summary.totalLicenses += pool.total_licenses || 0;
+        summary.allocatedLicenses += pool.allocated_licenses || 0;
+        summary.availableLicenses += pool.available_licenses || 0;
+        
+        if (pool.renewal_date && this.isExpiringSoon(pool.renewal_date)) {
+          summary.expiringSoon += 1;
+        }
+      });
+
+      this.licenseSummary = summary;
+    },
+
+    applyLicenseFilters() {
+      let filtered = [...this.licensePools];
+
+      if (this.licenseFilters.workloadGroup) {
+        filtered = filtered.filter(pool => pool.workload_group_id == this.licenseFilters.workloadGroup);
+      }
+
+      if (this.licenseFilters.licenseType) {
+        filtered = filtered.filter(pool => pool.vendor === this.licenseFilters.licenseType);
+      }
+
+      if (this.licenseFilters.utilization) {
+        filtered = filtered.filter(pool => {
+          const utilization = pool.allocated_licenses / pool.total_licenses * 100;
+          if (this.licenseFilters.utilization === 'high') return utilization > 80;
+          if (this.licenseFilters.utilization === 'medium') return utilization >= 50 && utilization <= 80;
+          if (this.licenseFilters.utilization === 'low') return utilization < 50;
+          return true;
+        });
+      }
+
+      if (this.licenseFilters.expiry) {
+        const now = new Date();
+        filtered = filtered.filter(pool => {
+          if (!pool.renewal_date) return false;
+          const renewalDate = new Date(pool.renewal_date);
+          const daysDiff = (renewalDate - now) / (1000 * 60 * 60 * 24);
+          
+          if (this.licenseFilters.expiry === '30days') return daysDiff <= 30 && daysDiff > 0;
+          if (this.licenseFilters.expiry === '90days') return daysDiff <= 90 && daysDiff > 0;
+          if (this.licenseFilters.expiry === 'expired') return daysDiff <= 0;
+          return true;
+        });
+      }
+
+      this.filteredLicensePools = filtered;
+    },
+
+    clearLicenseFilters() {
+      this.licenseFilters = {
+        workloadGroup: '',
+        licenseType: '',
+        utilization: '',
+        expiry: ''
+      };
+      this.applyLicenseFilters();
+    },
+
+    editLicensePool(pool) {
+      // TODO: Implement license pool editing modal
+      console.log('Edit license pool:', pool);
+    },
+
+    viewLicenseAllocations(pool) {
+      // TODO: Implement license allocation viewer
+      console.log('View allocations for pool:', pool);
+    },
+
+    isExpiringSoon(renewalDate) {
+      if (!renewalDate) return false;
+      const now = new Date();
+      const renewal = new Date(renewalDate);
+      const daysDiff = (renewal - now) / (1000 * 60 * 60 * 24);
+      return daysDiff <= 90 && daysDiff > 0;
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return '';
+      return new Date(dateString).toLocaleDateString();
     }
   }
 });
