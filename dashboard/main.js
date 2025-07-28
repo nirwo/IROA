@@ -384,7 +384,7 @@ const app = createApp({
                             'h-2 rounded-full transition-all duration-300',
                             (vm.cpu || 0) < 30 ? 'bg-green-500' : (vm.cpu || 0) < 70 ? 'bg-yellow-500' : 'bg-red-500'
                           ]"
-                          :style="{ width: (vm.cpu || 0) + '%' }"
+                          :style="{ width: Math.min(100, vm.cpu || 0) + '%' }"
                         ></div>
                       </div>
                     </div>
@@ -400,7 +400,7 @@ const app = createApp({
                             'h-2 rounded-full transition-all duration-300',
                             (vm.memory_usage || 0) < 50 ? 'bg-green-500' : (vm.memory_usage || 0) < 80 ? 'bg-yellow-500' : 'bg-red-500'
                           ]"
-                          :style="{ width: (vm.memory_usage || 0) + '%' }"
+                          :style="{ width: Math.min(100, vm.memory_usage || 0) + '%' }"
                         ></div>
                       </div>
                     </div>
@@ -480,7 +480,7 @@ const app = createApp({
                                 'h-2 rounded-full',
                                 (vm.cpu || 0) < 30 ? 'bg-green-500' : (vm.cpu || 0) < 70 ? 'bg-yellow-500' : 'bg-red-500'
                               ]"
-                              :style="{ width: (vm.cpu || 0) + '%' }"
+                              :style="{ width: Math.min(100, vm.cpu || 0) + '%' }"
                             ></div>
                           </div>
                           <span class="text-sm text-gray-600">{{ vm.cpu || 0 }}%</span>
@@ -494,7 +494,7 @@ const app = createApp({
                                 'h-2 rounded-full',
                                 (vm.memory_usage || 0) < 50 ? 'bg-green-500' : (vm.memory_usage || 0) < 80 ? 'bg-yellow-500' : 'bg-red-500'
                               ]"
-                              :style="{ width: (vm.memory_usage || 0) + '%' }"
+                              :style="{ width: Math.min(100, vm.memory_usage || 0) + '%' }"
                             ></div>
                           </div>
                           <span class="text-sm text-gray-600">{{ vm.memory_usage || 0 }}%</span>
@@ -1174,6 +1174,301 @@ const app = createApp({
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+
+          <!-- Workload Management Tab -->
+          <div v-if="activeTab === 'workloads'" class="space-y-6">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold">Workload Management</h2>
+                <div class="flex space-x-3">
+                  <button @click="showCreateWorkloadModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+                    Create Workload Group
+                  </button>
+                  <button @click="loadWorkloadGroups" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <!-- Smart Filter for Workloads -->
+              <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h3 class="text-sm font-medium text-gray-700 mb-3">Smart Filters</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">Filter by Status</label>
+                    <select v-model="workloadFilters.status" @change="applyWorkloadFilters" class="w-full px-3 py-2 text-sm border rounded-md">
+                      <option value="">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">Filter by Capacity</label>
+                    <select v-model="workloadFilters.capacity" @change="applyWorkloadFilters" class="w-full px-3 py-2 text-sm border rounded-md">
+                      <option value="">All Capacity</option>
+                      <option value="high">High (>80%)</option>
+                      <option value="medium">Medium (50-80%)</option>
+                      <option value="low">Low (<50%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">Search</label>
+                    <input v-model="workloadFilters.search" @input="applyWorkloadFilters" type="text" placeholder="Search workloads..." class="w-full px-3 py-2 text-sm border rounded-md">
+                  </div>
+                  <div class="flex items-end">
+                    <button @click="clearWorkloadFilters" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Workload Groups List -->
+              <div v-if="filteredWorkloadGroups.length > 0" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div v-for="workload in filteredWorkloadGroups" :key="workload.id" class="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
+                  <div class="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 class="text-lg font-semibold text-gray-900">{{ workload.display_name }}</h3>
+                      <p class="text-sm text-gray-500">Internal: {{ workload.name }}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                      <span :class="['px-2 py-1 rounded-full text-xs font-medium', 
+                        workload.customer_visible ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800']">
+                        {{ workload.customer_visible ? 'Customer Visible' : 'Internal Only' }}
+                      </span>
+                      <button @click="editWorkload(workload)" class="text-blue-600 hover:text-blue-700">
+                        <i data-lucide="edit" class="w-4 h-4"></i>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <p class="text-gray-600 mb-4">{{ workload.description || 'No description' }}</p>
+                  
+                  <!-- Capacity Summary -->
+                  <div v-if="workload.total_cpu_cores" class="bg-gray-50 rounded-lg p-4 mb-4">
+                    <h4 class="text-sm font-medium text-gray-700 mb-3">Resource Capacity</h4>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div class="text-lg font-bold text-blue-600">{{ workload.available_cpu_cores || 0 }}/{{ workload.total_cpu_cores || 0 }}</div>
+                        <div class="text-xs text-gray-500">CPU Cores</div>
+                      </div>
+                      <div>
+                        <div class="text-lg font-bold text-green-600">{{ workload.available_memory_gb || 0 }}/{{ workload.total_memory_gb || 0 }}</div>
+                        <div class="text-xs text-gray-500">Memory GB</div>
+                      </div>
+                      <div>
+                        <div class="text-lg font-bold text-purple-600">{{ workload.cluster_count || 0 }}</div>
+                        <div class="text-xs text-gray-500">Clusters</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Actions -->
+                  <div class="flex space-x-2">
+                    <button @click="manageWorkloadClusters(workload)" class="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                      Manage Clusters
+                    </button>
+                    <button @click="calculateWorkloadCapacity(workload.id)" class="px-3 py-2 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                      Refresh Capacity
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div v-else class="text-center py-12">
+                <i data-lucide="folder" class="w-12 h-12 text-gray-400 mx-auto mb-3"></i>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No Workload Groups</h3>
+                <p class="text-gray-600 mb-4">Create your first workload group to organize clusters</p>
+                <button @click="showCreateWorkloadModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  Create Workload Group
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- License Management Tab -->
+          <div v-if="activeTab === 'licenses'" class="space-y-6">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold">License Management</h2>
+                <div class="flex space-x-3">
+                  <button @click="showCreateLicensePoolModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+                    Add License Pool
+                  </button>
+                  <button @click="loadLicensePools" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <!-- Smart Filter for Licenses -->
+              <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h3 class="text-sm font-medium text-gray-700 mb-3">Smart Filters</h3>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">Workload Group</label>
+                    <select v-model="licenseFilters.workloadGroup" @change="applyLicenseFilters" class="w-full px-3 py-2 text-sm border rounded-md">
+                      <option value="">All Workloads</option>
+                      <option v-for="wg in workloadGroups" :key="wg.id" :value="wg.id">{{ wg.display_name }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">License Type</label>
+                    <select v-model="licenseFilters.licenseType" @change="applyLicenseFilters" class="w-full px-3 py-2 text-sm border rounded-md">
+                      <option value="">All Types</option>
+                      <option value="Citrix">Citrix</option>
+                      <option value="Microsoft">Microsoft</option>
+                      <option value="Canonical">Canonical</option>
+                      <option value="Lakeside">Lakeside</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">Utilization</label>
+                    <select v-model="licenseFilters.utilization" @change="applyLicenseFilters" class="w-full px-3 py-2 text-sm border rounded-md">
+                      <option value="">All Utilization</option>
+                      <option value="high">High (>80%)</option>
+                      <option value="medium">Medium (50-80%)</option>
+                      <option value="low">Low (<50%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 mb-1">Expiry</label>
+                    <select v-model="licenseFilters.expiry" @change="applyLicenseFilters" class="w-full px-3 py-2 text-sm border rounded-md">
+                      <option value="">All</option>
+                      <option value="30days">Expires in 30 days</option>
+                      <option value="90days">Expires in 90 days</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </div>
+                  <div class="flex items-end">
+                    <button @click="clearLicenseFilters" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- License Summary Cards -->
+              <div v-if="licenseSummary" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-sm font-medium text-gray-600">Total Licenses</p>
+                      <p class="text-2xl font-bold text-indigo-600">{{ licenseSummary.totalLicenses }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <i data-lucide="key" class="w-6 h-6 text-indigo-600"></i>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-sm font-medium text-gray-600">Available</p>
+                      <p class="text-2xl font-bold text-green-600">{{ licenseSummary.availableLicenses }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <i data-lucide="check-circle" class="w-6 h-6 text-green-600"></i>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-6">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-sm font-medium text-gray-600">In Use</p>
+                      <p class="text-2xl font-bold text-orange-600">{{ licenseSummary.allocatedLicenses }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <i data-lucide="users" class="w-6 h-6 text-orange-600"></i>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="bg-gradient-to-r from-red-50 to-pink-50 rounded-lg p-6">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-sm font-medium text-gray-600">Expiring Soon</p>
+                      <p class="text-2xl font-bold text-red-600">{{ licenseSummary.expiringSoon }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                      <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- License Pools Table -->
+              <div v-if="filteredLicensePools.length > 0" class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">License Type</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workload Group</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Renewal</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <tr v-for="pool in filteredLicensePools" :key="pool.id" class="hover:bg-gray-50">
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div class="text-sm font-medium text-gray-900">{{ pool.license_type_name }}</div>
+                          <div class="text-sm text-gray-500">{{ pool.vendor }} - {{ pool.product }}</div>
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">{{ pool.workload_group_name }}</div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                          <div class="text-sm text-gray-900 mr-2">{{ pool.allocated_licenses }}/{{ pool.total_licenses }}</div>
+                          <div class="w-16 bg-gray-200 rounded-full h-2">
+                            <div :class="['h-2 rounded-full', 
+                              (pool.allocated_licenses / pool.total_licenses * 100) > 80 ? 'bg-red-500' : 
+                              (pool.allocated_licenses / pool.total_licenses * 100) > 60 ? 'bg-yellow-500' : 'bg-green-500']"
+                              :style="{ width: Math.min(100, (pool.allocated_licenses / pool.total_licenses * 100)) + '%' }">
+                            </div>
+                          </div>
+                          <div class="text-xs text-gray-500 ml-2">{{ Math.round(pool.allocated_licenses / pool.total_licenses * 100) }}%</div>
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">${{ (pool.cost_per_license * pool.total_licenses).toFixed(2) }}</div>
+                        <div class="text-sm text-gray-500">${{ pool.cost_per_license }}/license</div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <div v-if="pool.renewal_date" :class="['text-sm', isExpiringSoon(pool.renewal_date) ? 'text-red-600 font-medium' : 'text-gray-900']">
+                          {{ formatDate(pool.renewal_date) }}
+                        </div>
+                        <div v-else class="text-sm text-gray-500">No renewal date</div>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button @click="editLicensePool(pool)" class="text-blue-600 hover:text-blue-700 mr-3">Edit</button>
+                        <button @click="viewLicenseAllocations(pool)" class="text-green-600 hover:text-green-700">Allocations</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div v-else class="text-center py-12">
+                <i data-lucide="key" class="w-12 h-12 text-gray-400 mx-auto mb-3"></i>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No License Pools</h3>
+                <p class="text-gray-600 mb-4">Add your first license pool to start tracking licenses</p>
+                <button @click="showCreateLicensePoolModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  Add License Pool
+                </button>
+              </div>
             </div>
           </div>
           
@@ -1890,7 +2185,7 @@ const app = createApp({
           lastLogin: null
         }
       },
-      activeTab: 'overview',
+      activeTab: localStorage.getItem('iroa_activeTab') || 'overview',  // Persist active tab across refreshes
       loading: false,
       searchTerm: '',
       filterStatus: 'all',
@@ -1950,6 +2245,8 @@ const app = createApp({
         { id: 'vms', name: 'Virtual Machines', icon: 'server', requiredRole: 'user', requiredPermission: 'view_vms' },
         { id: 'capacity', name: 'Capacity Planning', icon: 'cpu', requiredRole: 'manager', requiredPermission: 'view_capacity' },
         { id: 'profiles', name: 'VM Profiles', icon: 'layers', requiredRole: 'manager', requiredPermission: 'view_profiles' },
+        { id: 'workloads', name: 'Workload Management', icon: 'folder', requiredRole: 'admin', requiredPermission: 'manage_workloads' },
+        { id: 'licenses', name: 'License Management', icon: 'key', requiredRole: 'admin', requiredPermission: 'manage_licenses' },
         { id: 'analytics', name: 'Analytics', icon: 'bar-chart-3', requiredRole: 'manager', requiredPermission: 'view_analytics' },
         { id: 'monitoring', name: 'Real-Time Monitoring', icon: 'activity', requiredRole: 'user', requiredPermission: 'view_monitoring' },
         { id: 'users', name: 'User Management', icon: 'users', requiredRole: 'admin', requiredPermission: 'manage_users' },
@@ -1966,7 +2263,7 @@ const app = createApp({
           status: 'active',
           lastLogin: '2024-01-15T10:30:00Z',
           permissions: {
-            pages: ['view_overview', 'view_recommendations', 'view_vms', 'view_capacity', 'view_profiles', 'view_analytics', 'view_monitoring', 'manage_users', 'system_admin'],
+            pages: ['view_overview', 'view_recommendations', 'view_vms', 'view_capacity', 'view_profiles', 'manage_workloads', 'manage_licenses', 'view_analytics', 'view_monitoring', 'manage_users', 'system_admin'],
             data: ['sensitive_data', 'financial_data', 'user_data', 'system_logs']
           }
         },
@@ -2005,7 +2302,7 @@ const app = createApp({
           name: 'Administrator',
           description: 'Full system access with user management capabilities',
           permissions: {
-            pages: ['view_overview', 'view_recommendations', 'view_vms', 'view_capacity', 'view_profiles', 'view_analytics', 'view_monitoring', 'manage_users', 'system_admin'],
+            pages: ['view_overview', 'view_recommendations', 'view_vms', 'view_capacity', 'view_profiles', 'manage_workloads', 'manage_licenses', 'view_analytics', 'view_monitoring', 'manage_users', 'system_admin'],
             data: ['sensitive_data', 'financial_data', 'user_data', 'system_logs', 'operational_data', 'basic_data']
           }
         },
@@ -2168,6 +2465,12 @@ const app = createApp({
       }
       
       return vms;
+    }
+  },
+  watch: {
+    activeTab(newTab) {
+      // Save current tab to localStorage for persistence across refreshes
+      localStorage.setItem('iroa_activeTab', newTab);
     }
   },
   async mounted() {
@@ -3190,6 +3493,7 @@ const app = createApp({
         if (this.vcenterInventory.hasSyncedData && this.vcenterInventory.vms.length > 0) {
           console.log('📊 Analyzing VM profiles from real vCenter data');
           this.profileData = this.analyzeVMProfilesFromVCenterData();
+          console.log('✅ Profile data generated:', this.profileData);
           return;
         }
         
